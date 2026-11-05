@@ -1,0 +1,8 @@
+{
+  "maxFiles": 5000,
+  "maxTotalBytes": 268435456,
+  "maxFileBytes": 33554432,
+  "gitIndexTimeoutMs": 120000,
+  "utilityTimeoutMs": 60000,
+  "prepareTimeoutSeconds": 300
+}

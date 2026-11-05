@@ -1,0 +1,133 @@
+/* Keep the office central; use dividers instead of nested cards. */
+.topbar {
+  height: 64px;
+}
+.page-heading {
+  padding-top: 20px;
+  padding-bottom: 18px;
+}
+.page-heading h1 {
+  font-size: 28px;
+}
+.world-container {
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.floor-selector > button,
+.weather-chip,
+.live-chip {
+  border: 0;
+  box-shadow: none;
+  background: #ffffffdf;
+}
+.floor-icon {
+  display: none;
+}
+.team-section {
+  margin-top: 20px;
+}
+.team-strip {
+  gap: 8px;
+}
+.team-card {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 10px 8px;
+  min-height: 88px;
+}
+.team-card:hover,
+.team-card.selected {
+  border: 0;
+  background: #e9edf1;
+}
+.management-panel {
+  box-shadow: 0 8px 32px #18253418;
+  border-radius: 8px;
+}
+.panel-content > .eyebrow {
+  display: none;
+}
+.panel-content > h2 {
+  margin-top: 4px;
+}
+.project-row,
+.job-list > button,
+.subtask,
+.settings-block,
+.execution-separation,
+.office-life-card,
+.connect-project,
+.meeting-card,
+.person-card,
+.briefing-card {
+  border: 0;
+  border-bottom: 1px solid #e0e2e4;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.empty-state {
+  min-height: 0;
+  padding: 24px 8px;
+  background: transparent;
+  border: 0;
+}
+.empty-state h3 {
+  font-size: 14px;
+}
+.empty-state p {
+  font-size: 12px;
+}
+.dependency-flow .flow-arrow {
+  display: none;
+}
+.subtask {
+  margin: 0;
+}
+.approval-review,
+.evidence-summary {
+  margin: 18px 0;
+  padding: 14px 0;
+  border-block: 1px solid #d9dfe5;
+}
+.approval-review h4 {
+  margin: 0 0 8px;
+}
+.approval-review p,
+.evidence-summary p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.evidence-summary {
+  overflow-wrap: anywhere;
+}
+.evidence-summary .text-button {
+  margin-right: 14px;
+}
+.status.awaiting_approval {
+  color: #815a22;
+}
+.status.unverified,
+.status.interrupted {
+  color: #a34535;
+}
+.job-actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 650px) {
+  .page-heading h1 {
+    font-size: 24px;
+  }
+  .heading-actions .secondary {
+    display: none;
+  }
+  .team-card {
+    min-height: 82px;
+  }
+  .topbar {
+    height: 58px;
+  }
+}

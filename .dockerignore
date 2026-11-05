@@ -1,0 +1,8 @@
+**
+!Dockerfile.agent
+!server/
+!server/agents/
+!server/agents/worker.mjs
+!server/agents/sandbox-probe.mjs
+!shared/
+!shared/workspace-limits.json

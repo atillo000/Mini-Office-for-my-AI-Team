@@ -1,0 +1,12 @@
+FROM node:24-bookworm
+RUN git --version && test -f /etc/ssl/certs/ca-certificates.crt
+ARG CODEX_VERSION=0.166.0
+RUN npm install -g @openai/codex@${CODEX_VERSION} && codex exec --help && git config --system --add safe.directory /workspace
+COPY server/agents/worker.mjs /opt/office/worker.mjs
+COPY shared/workspace-limits.json /opt/office/workspace-limits.json
+COPY server/agents/sandbox-probe.mjs /opt/office/sandbox-probe.mjs
+RUN mkdir -p /home/node/.codex /workspace && chown -R node:node /home/node /workspace
+USER node
+WORKDIR /workspace
+ENV HOME=/home/node
+CMD ["codex", "--version"]

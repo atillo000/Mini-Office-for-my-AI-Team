@@ -1,0 +1,212 @@
+:root {
+  color: #292e36;
+  background: #f4f3f1;
+}
+.sidebar,
+.topbar {
+  background: #faf9f7;
+  border-color: #e2e0dc;
+}
+.brand-mark {
+  background: #2d425c;
+  color: #fffaf2;
+  box-shadow: 0 4px 12px #26374c18;
+}
+.wordmark {
+  color: #263244;
+}
+.nav-button.active {
+  background: #e8ecf1;
+  color: #345675;
+}
+.nav-button.active:before {
+  background: #456c91;
+}
+.nav-button:hover {
+  background: #eeedeb;
+  color: #3b536d;
+}
+.button.primary {
+  background: #304d70;
+  color: #ffffff;
+  box-shadow: 0 3px 8px #22364d15;
+}
+.button.primary:hover {
+  background: #253e5d;
+}
+.button.secondary {
+  background: #fbfaf8;
+  color: #626a75;
+  border-color: #dcdde0;
+}
+.heading-dot {
+  color: #b17e53;
+}
+.page-heading h1 {
+  color: #263244;
+}
+.eyebrow {
+  color: #8c8276;
+}
+.world-container {
+  background: #e7e5e1;
+  border-color: #d9d6d0;
+  box-shadow: inset 0 0 60px #554a3605;
+}
+.floor-selector > button,
+.weather-chip,
+.world-controls,
+.simulation-controls {
+  background: #fffdfaeb;
+  border-color: #dcd8d1;
+}
+.floor-icon {
+  background: #eeebe6;
+  color: #6b7481;
+  border-color: #dedbd5;
+}
+.live-chip {
+  background: #fdfcf7eb;
+  color: #626d76;
+  border-color: #dedbd4;
+}
+.live-chip i,
+.connection-dot.online,
+.ceo-avatar span,
+.sim-dot {
+  background: #4f8861;
+}
+.world-hint {
+  color: #7e7c77;
+  background: #faf8f1c9;
+}
+.world-controls button {
+  color: #626d79;
+}
+.world-controls button:hover {
+  background: #e8e9eb;
+}
+.office-note {
+  background: #fdfbf7f2;
+  border-color: #ded9d0;
+  box-shadow: 0 8px 30px #453a2810;
+}
+.office-note h2 {
+  color: #3a4350;
+}
+.office-note > p {
+  color: #848078;
+}
+.note-icon,
+.note-icon.green {
+  background: #eee9e1;
+  color: #8e775c;
+}
+.note-row > svg,
+.note-footer {
+  color: #6d7e92;
+}
+.room-tag {
+  background: #fffdf2d9;
+  color: #66696e;
+  border-color: #b7b1a45a;
+  letter-spacing: 0.8px;
+  box-shadow: 0 2px 6px #352e1e0c;
+}
+.room-tag.active {
+  color: #365e87;
+  border-color: #9ab5ce;
+  background: #f1f6fbf0;
+}
+.avatar-label {
+  color: #3b4552;
+  background: #fffdf7f2;
+  border-color: #d0cec7;
+  box-shadow: 0 3px 10px #272c3214;
+}
+.avatar-label.selected {
+  border-color: #779bc0;
+  color: #2e557e;
+}
+.team-card {
+  background: #fcfbf9;
+  border-color: #dfdfdd;
+}
+.team-card:hover,
+.team-card.selected {
+  background: #f0f2f5;
+  border-color: #a6b4c3;
+}
+.section-heading h2 > span {
+  background: #e8e9eb;
+  color: #77818d;
+}
+.section-heading > button {
+  color: #667b92;
+}
+.team-card strong {
+  color: #303b49;
+}
+.status {
+  color: #718075;
+}
+.status i {
+  background: #62916a;
+}
+.status.walking i,
+.status.queued i {
+  background: #bc8a4d;
+}
+.management-panel {
+  background: #fdfcf9f7;
+  border-color: #d8d6d1;
+  box-shadow: 0 12px 45px #34322d1a;
+}
+.management-panel h2 {
+  color: #35465c;
+}
+.management-panel h3,
+.management-panel strong {
+  color: #465367;
+}
+.management-panel p,
+.management-panel small,
+.management-panel time,
+.management-panel .report-text {
+  color: #73777e;
+}
+.management-panel .microcopy {
+  color: #83878d !important;
+}
+.management-panel .button.primary {
+  color: #fff;
+}
+.management-panel .panel-tabs button.active {
+  border-color: #688bb2;
+  color: #3d638d;
+}
+.management-panel .stacked-form input:focus,
+.management-panel .stacked-form textarea:focus,
+.management-panel .stacked-form select:focus {
+  border-color: #8aa5c0;
+  box-shadow: 0 0 0 2px #8aa5c014;
+}
+.management-panel .chat-compose button {
+  background: #42658a;
+}
+.management-panel .log-view {
+  color: #dce4ee;
+  background: #263344;
+  border-color: #465569;
+}
+.toast {
+  background: #354e6c;
+  border-color: #647d99;
+}
+.management-panel .toggle-row input,
+.management-panel .checkbox-label input {
+  accent-color: #4a6d92;
+}
+.night .office-note {
+  background: #fdfaf3f2;
+}
