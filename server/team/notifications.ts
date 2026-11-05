@@ -3,6 +3,7 @@ import type { Job, Message } from '../../shared/types';
 import type { VideoIdea } from '../../shared/studio';
 import type { ExternalDraft, MailItem, NotificationItem } from '../../shared/connected';
 import type { CapturedMessage, CommunicationReport, LocalReplyDraft } from '../../shared/reader';
+import type { ShiftPlan } from '../../shared/shifts';
 export function notifications(store: Store): NotificationItem[] {
   const result: Omit<NotificationItem, 'read'>[] = [];
   for (const job of store.list<Job>('jobs')) {
@@ -19,11 +20,13 @@ export function notifications(store: Store): NotificationItem[] {
       revision: job.approvalRequest?.id || job.state + ':' + job.attempts,
       target: {
         panel:
-          job.kind === 'content-ideas'
-            ? 'start'
-            : job.kind === 'assistant-chat' || job.kind === 'communication-review'
-              ? 'inbox'
-              : 'projects',
+          job.kind === 'shift-review'
+            ? 'timelogs'
+            : job.kind === 'content-ideas'
+              ? 'start'
+              : job.kind === 'assistant-chat' || job.kind === 'communication-review'
+                ? 'inbox'
+                : 'projects',
         id: job.id,
         channel: job.relatedId,
       },
@@ -106,7 +109,25 @@ export function notifications(store: Store): NotificationItem[] {
       target: { panel: 'inbox', id: message.id, channel: 'external:' + message.provider },
       actions: ['OPEN', 'REPLY'],
     });
-  for (const report of store.list<CommunicationReport>('communication_reports'))
+  const latestReports = new Map<string, CommunicationReport>();
+  for (const plan of store.list<ShiftPlan>('shift_plans'))
+    if (plan.status !== 'PREPARED')
+      result.push({
+        id: 'shift-plan:' + plan.id,
+        category: plan.status === 'NEEDS_REVIEW' ? 'ERROR' : 'APPROVAL',
+        title: 'Review after-shift Zoho allocation',
+        detail: plan.summary + ' · ' + plan.unallocatedMinutes + ' minutes unallocated',
+        at: plan.createdAt,
+        revision: plan.status + ':' + plan.version,
+        target: { panel: 'timelogs', id: plan.id },
+        actions: ['REVIEW'],
+      });
+  for (const report of store.list<CommunicationReport>('communication_reports')) {
+    const key = report.provider + ':' + report.scope;
+    if (!latestReports.has(key) || latestReports.get(key)!.createdAt <= report.createdAt)
+      latestReports.set(key, report);
+  }
+  for (const report of latestReports.values())
     for (const assessment of report.assessments)
       if (assessment.urgency === 'URGENT' || assessment.urgency === 'IMPORTANT')
         result.push({

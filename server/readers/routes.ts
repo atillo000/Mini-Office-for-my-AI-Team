@@ -113,6 +113,7 @@ export function registerReaderRoutes(
       id: crypto.randomUUID(),
       provider: message.provider,
       sourceMessageId: message.id,
+      sourceVersion: message.version,
       reportId: '',
       scope: message.scope,
       body,

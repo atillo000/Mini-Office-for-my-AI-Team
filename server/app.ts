@@ -19,6 +19,8 @@ import type { Accounts } from './connected/accounts';
 import { enqueueChat } from './team/chat';
 import { registerReaderRoutes } from './readers/routes';
 import type { ReaderDriver } from './readers/browser';
+import { registerShiftRoutes } from './shifts/routes';
+import type { SproutDriver } from './shifts/browser';
 import type { Employee, Job, Meeting, Message, Project } from '../shared/types';
 const text = z.string().trim().min(1).max(12000);
 const id = z.string().min(1).max(100);
@@ -57,6 +59,7 @@ const authEqual = (a: string, b: string) => {
   return first.length === second.length && timingSafeEqual(first, second);
 };
 export interface AppOptions {
+  sproutDriver?: SproutDriver;
   readerDriver?: ReaderDriver;
   accounts?: Accounts;
   token?: string;
@@ -201,6 +204,15 @@ export async function createApp(store = new Store(), options: AppOptions = {}) {
     broadcast,
     options.readerDriver,
     !options.skipExternal,
+  );
+  const shifts = registerShiftRoutes(
+    app,
+    store,
+    queue,
+    connected.actions,
+    broadcast,
+    !options.skipExternal,
+    options.sproutDriver,
   );
   app.get('/api/health', async () => ({ ok: true, authRequired: !!token }));
   app.get('/api/snapshot', async () => ({
@@ -360,6 +372,9 @@ export async function createApp(store = new Store(), options: AppOptions = {}) {
           ? ['communication-run.json', 'communication-request.json', 'communication-report.json']
           : []),
         ...(job.kind === 'assistant-chat' ? ['chat-run.json'] : []),
+        ...(job.kind === 'shift-review'
+          ? ['shift-request.json', 'shift-run.json', 'shift-plan.json']
+          : []),
         'execution-policy.json',
         ...(job.kind === 'content-ideas'
           ? ['content-request.json', 'idea-drafts.json', 'ideas-schema.json']
@@ -513,6 +528,7 @@ export async function createApp(store = new Store(), options: AppOptions = {}) {
     });
   }
   app.addHook('onClose', async () => {
+    await shifts.shutdown();
     await readers.shutdown();
     await connected.shutdown();
     if (weatherTimer) clearInterval(weatherTimer);

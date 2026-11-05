@@ -74,6 +74,7 @@ export interface LocalReplyDraft {
   id: string;
   provider: ReaderProvider;
   sourceMessageId: string;
+  sourceVersion?: number;
   reportId: string;
   scope: string;
   body: string;

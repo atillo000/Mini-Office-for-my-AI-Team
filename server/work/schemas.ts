@@ -21,6 +21,10 @@ export const projectInput = z
   .strict();
 export const mappingInput = z
   .object({
+    routingCategory: z
+      .enum(['PROJECT', 'GENERAL', 'BUSINESS_DEVELOPMENT', 'NEEDS_REVIEW'])
+      .default('NEEDS_REVIEW'),
+    projectNumber: z.string().trim().max(100).default(''),
     knowledgeProjectId: ref,
     activityName: short,
     portalId: ref.optional(),

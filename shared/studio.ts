@@ -59,12 +59,14 @@ export interface VideoIdea extends VideoIdeaContent {
   }[];
 }
 export interface ContentRequest {
+  production?: VideoProductionPolicy;
   brief: VideoBrief;
   project: SharedMemory['projects'][number];
   memory: SharedMemory | null;
   feedback: string[];
 }
 export interface StudioSnapshot {
+  production: VideoProductionPolicy;
   profile: WorkProfile;
   project: KnowledgeProject | null;
   brief: VideoBrief | null;
@@ -75,4 +77,16 @@ export interface StudioSnapshot {
     facebook: 'NOT_CONNECTED';
     videoRendering: 'NOT_CONNECTED';
   };
+}
+export interface VideoProductionPolicy {
+  version: number;
+  freeOnly: true;
+  tool: 'Google Flow';
+  model: 'Veo 3.1 Lite';
+  dailyCreditLimit: 50;
+  creditsPerGeneration: 10;
+  outputsPerScene: 1;
+  sceneCount: 4 | 5;
+  verifyBalanceBeforeGeneration: true;
+  allowPaidTopUps: false;
 }

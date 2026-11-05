@@ -39,6 +39,7 @@ interface OfficeState {
   select: (id: string | null) => void;
   open: (panel: Panel) => void;
   focus: (room: RoomId | null) => void;
+  toggleLighting: () => void;
   setSnapshot: (data: Snapshot) => void;
   patch: (data: Partial<OfficeState>) => void;
   notify: (message: string) => void;
@@ -69,6 +70,7 @@ export const useOffice = create<OfficeState>()(
       select: (selected) => set({ selected, panel: null }),
       open: (panel) => set({ panel, selected: null, targetId: null, targetChannel: null }),
       focus: (room) => set((s) => ({ room, focusVersion: s.focusVersion + 1 })),
+      toggleLighting: () => set((s) => ({ night: !s.night, autoLighting: false })),
       setSnapshot: (snapshot) =>
         set({
           snapshot,

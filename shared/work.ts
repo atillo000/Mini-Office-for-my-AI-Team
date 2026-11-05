@@ -141,6 +141,8 @@ export interface KnowledgeProject {
   updatedAt: number;
 }
 export interface ZohoMapping {
+  routingCategory?: 'PROJECT' | 'GENERAL' | 'BUSINESS_DEVELOPMENT' | 'NEEDS_REVIEW';
+  projectNumber?: string;
   id: string;
   knowledgeProjectId: string;
   activityName: string;

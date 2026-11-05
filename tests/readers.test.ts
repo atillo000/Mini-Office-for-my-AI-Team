@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser } from 'playwright';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { parseSproutRows } from '../server/shifts/browser';
 import path from 'node:path';
 import os from 'node:os';
 import { Store } from '../server/db';
@@ -83,6 +84,7 @@ class FixtureModel extends CodexAdapter {
   ) {
     expect(readOnly).toBe(true);
     expect(skipGit).toBe(true);
+    expect(prompt).toContain('Observation time is not message sent time');
     const request = JSON.parse(
       prompt.slice(prompt.indexOf('{"snapshot":')),
     ) as CommunicationRequest;
@@ -184,8 +186,48 @@ describe('Read-only browser boundaries', () => {
     expect(next.jobId).toBeTruthy();
     expect(store.list('jobs')).toHaveLength(2);
   });
+  it('reviews changed provider timestamps and locks sharing while watching', async () => {
+    const { readers, driver, store } = fixture();
+    const first = await readers.watch('teams', 'SELECTED', false);
+    await expect(readers.capture('teams', 'SELECTED', true)).rejects.toThrow('Stop watching');
+    driver.messages[0].sentAt = '2026-11-05T01:00:00Z';
+    const next = await readers.capture('teams', 'SELECTED', false, true);
+    expect(next.newMessages).toBe(1);
+    expect(
+      store.get<{ version: number }>('captured_messages', first.snapshot.messageIds[0])?.version,
+    ).toBe(2);
+  });
 });
 describe('Real-review contracts and local drafts', () => {
+  it('preserves edited and archived drafts on repeated reviews, and replaces stale urgency alerts', async () => {
+    const { readers, store } = fixture(true);
+    const first = await readers.capture('teams', 'SELECTED', true);
+    expect((await terminal(store, first.jobId!)).state).toBe('COMPLETED');
+    const draft = store.list<LocalReplyDraft>('local_reply_drafts')[0];
+    readers.editDraft(draft.id, {
+      version: draft.version,
+      body: 'My edited reply.',
+      status: 'DRAFT',
+    });
+    const second = await readers.capture('teams', 'SELECTED', true);
+    expect((await terminal(store, second.jobId!)).state).toBe('COMPLETED');
+    expect(store.list<LocalReplyDraft>('local_reply_drafts')).toHaveLength(1);
+    const edited = store.get<LocalReplyDraft>('local_reply_drafts', draft.id)!;
+    expect(edited.body).toBe('My edited reply.');
+    readers.editDraft(draft.id, { version: edited.version, body: edited.body, status: 'ARCHIVED' });
+    const third = await readers.capture('teams', 'SELECTED', true);
+    expect((await terminal(store, third.jobId!)).state).toBe('COMPLETED');
+    expect(store.list<LocalReplyDraft>('local_reply_drafts')).toHaveLength(1);
+    expect(store.get<LocalReplyDraft>('local_reply_drafts', draft.id)?.status).toBe('ARCHIVED');
+    expect(notifications(store).filter((n) => n.category === 'URGENT')).toHaveLength(1);
+    const report = store.list<CommunicationReport>('communication_reports').at(-1)!;
+    store.put('communication_reports', report.id, {
+      ...report,
+      assessments: report.assessments.map((a) => ({ ...a, urgency: 'ROUTINE' })),
+    });
+    expect(notifications(store).some((n) => n.category === 'URGENT')).toBe(false);
+    expect(store.list('communication_reports')).toHaveLength(3);
+  });
   it('requires completed model execution and source-matching evidence; creates only local drafts', async () => {
     const { readers, store } = fixture(true);
     const result = await readers.capture('teams', 'SELECTED', true),
@@ -279,16 +321,48 @@ describe('DOM extraction in a real browser with explicit QA content', () => {
   afterAll(async () => {
     await browser?.close();
   });
+  it('reads dated Sprout attendance groups and excludes location/IP details and other views', async () => {
+    const page = await browser.newPage();
+    const script = readFileSync(
+      new URL('../server/shifts/sprout-dom.mjs', import.meta.url),
+      'utf8',
+    ).replace('export const readAttendance', 'const readAttendance');
+    try {
+      await page.setContent(
+        '<h1>My Attendance Logs</h1><div class="my-attendance-mainpanel-collapse"><h3>November 04, 2026WEDNESDAY</h3><table><thead><tr><th>TIME</th><th>IN/OUT</th><th>LOCATION</th></tr></thead><tbody><tr><td>09:11 AM</td><td>IN</td><td>Private location fixture</td></tr><tr><td>06:30 PM</td><td>OUT</td><td>Private IP fixture</td></tr></tbody></table></div>',
+      );
+      const data = (await page.evaluate('(() => {' + script + ';return readAttendance();})()')) as {
+        rows: Record<string, string>[];
+      };
+      expect(parseSproutRows(data.rows).map((p) => p.type)).toEqual(['IN', 'OUT']);
+      expect(data.rows[0].Date).toBe('2026-11-04');
+      expect(JSON.stringify(data)).not.toContain('Private');
+      await page.setContent(
+        '<h1>Manager attendance</h1><table><tr><th>TIME</th></tr><tr><td>09:00 AM</td></tr></table>',
+      );
+      expect(
+        (
+          (await page.evaluate('(() => {' + script + ';return readAttendance();})()')) as {
+            selfView: boolean;
+          }
+        ).selfView,
+      ).toBe(false);
+    } finally {
+      await page.close();
+    }
+  });
   it('reads current Teams message selectors without transpiler globals or compose text', async () => {
     const page = await browser.newPage();
     try {
       await page.setContent(
-        '<h2 data-tid="chat-title">QA project chat</h2><div data-tid="chat-pane-message" id="message-one"><span data-tid="message-author-name">QA colleague</span><div>Review the proposal today.</div></div><div role="textbox" contenteditable="true">Never capture this draft</div>',
+        '<h2 data-tid="chat-title">QA project chat</h2><div data-tid="chat-pane-item"><span data-tid="message-author-name">QA colleague</span><time datetime="2026-11-05T01:00:00Z"></time><div data-tid="chat-pane-message" id="message-one"><div>Review the proposal today.</div></div></div><div role="textbox" contenteditable="true">Never capture this draft</div>',
       );
       const view = await extractRenderedView(page, 'teams', 'SELECTED');
       expect(view.scope).toBe('QA project chat');
       expect(view.messages).toHaveLength(1);
       expect(view.messages[0].text).toContain('proposal');
+      expect(view.messages[0].author).toBe('QA colleague');
+      expect(view.messages[0].sentAt).toBe('2026-11-05T01:00:00Z');
       expect(JSON.stringify(view)).not.toContain('Never capture');
     } finally {
       await page.close();

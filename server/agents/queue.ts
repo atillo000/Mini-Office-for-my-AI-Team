@@ -8,6 +8,7 @@ import { generateVideoIdeas } from '../studio/generate';
 import { MemoryService, memoryPrompt } from '../studio/memory';
 import { runChat } from '../team/chat';
 import { reviewCommunication } from '../readers/review';
+import { reviewShift } from '../shifts/review';
 import type { ApprovalRequest, Employee, Job, Meeting, Message, Project } from '../../shared/types';
 const planSchemaValue = z.object({
   summary: z.string().max(20000),
@@ -93,7 +94,8 @@ export class JobQueue {
     if (
       job.kind === 'content-ideas' ||
       job.kind === 'assistant-chat' ||
-      job.kind === 'communication-review'
+      job.kind === 'communication-review' ||
+      job.kind === 'shift-review'
     )
       throw new Error(
         'Manage content drafting from Start here → Video ideas. This is not a coding job.',
@@ -262,6 +264,17 @@ export class JobQueue {
     const timeout = setTimeout(() => this.controller?.abort(), 30 * 60 * 1000);
     try {
       new MemoryService(this.store).assertCurrent(job.memory);
+      if (job.kind === 'shift-review') {
+        await reviewShift(
+          this.store,
+          job,
+          this.adapter,
+          signal,
+          (value) => this.log(job, value),
+          () => this.save(job),
+        );
+        return;
+      }
       if (job.kind === 'communication-review') {
         await reviewCommunication(
           this.store,

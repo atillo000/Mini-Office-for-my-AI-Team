@@ -104,7 +104,9 @@ export function BrowserControls({
           disabled={action.busy || !state || state.state === 'CLOSED'}
           onClick={() => void act('capture')}
         >
-          {share ? 'Read and ask my AI team' : 'Capture rendered messages'}
+          {(state?.watching ? state.shareWithAI : share)
+            ? 'Read and ask my AI team'
+            : 'Capture rendered messages'}
         </button>
         {state?.watching ? (
           <button

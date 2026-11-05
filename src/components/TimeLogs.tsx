@@ -10,6 +10,7 @@ import { useOffice } from '../store';
 import { useResource } from './useResource';
 import { ErrorText, Submit, useAction, post } from './common';
 import { ExternalDraftReview } from './ExternalDraft';
+import { ShiftPlanning } from './ShiftPlanning';
 type Discovery = { items: ZohoEntity[]; complete: boolean };
 export function TimeLogs() {
   const s = useOffice(),
@@ -122,6 +123,7 @@ export function TimeLogs() {
   return (
     <div className="panel-content">
       <h2>Time logs</h2>
+      <ShiftPlanning refreshDrafts={drafts.refresh} />
       <p>Record actual work. Drafts wait for your review before anything is submitted.</p>
       <div className="work-actions">
         <button

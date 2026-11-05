@@ -234,6 +234,8 @@ function MappingEditor({
         const data = {
           knowledgeProjectId: f.get('knowledgeProjectId'),
           activityName: f.get('activityName'),
+          routingCategory: f.get('routingCategory'),
+          projectNumber: f.get('projectNumber'),
           portalId: optional(f.get('portalId')),
           projectId: optional(f.get('projectId')),
           taskId: optional(f.get('taskId')),
@@ -264,6 +266,20 @@ function MappingEditor({
       <Field title="Activity name" name="activityName" value={mapping?.activityName} required />
       <Field title="Portal ID" name="portalId" value={mapping?.portalId} />
       <Field title="Zoho project ID" name="projectId" value={mapping?.projectId} />
+      <label>
+        Time-log category
+        <select
+          name="routingCategory"
+          aria-label="Time-log category"
+          defaultValue={mapping?.routingCategory || 'NEEDS_REVIEW'}
+        >
+          <option value="NEEDS_REVIEW">Needs review</option>
+          <option value="PROJECT">Approved numbered project</option>
+          <option value="GENERAL">SIN_TecSurge_General</option>
+          <option value="BUSINESS_DEVELOPMENT">SIN_TecSurge_BusinessDevelopment (proposal)</option>
+        </select>
+      </label>
+      <Field title="Approved project number" name="projectNumber" value={mapping?.projectNumber} />
       <label>
         Module
         <select aria-label="Module" name="module" defaultValue={mapping?.module || 'TASK'}>

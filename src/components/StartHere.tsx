@@ -11,6 +11,7 @@ import { api } from '../api';
 import { useOffice } from '../store';
 import { useResource } from './useResource';
 import { ErrorText, Status, Submit, useAction, post, dateTime } from './common';
+import { VideoBudget } from './VideoBudget';
 
 type Idea = VideoIdea & { contentHash: string };
 type Studio = Omit<StudioSnapshot, 'ideas'> & {
@@ -302,6 +303,7 @@ function VideoStudio({ data, refresh }: { data: Studio; refresh: () => Promise<v
           <p className="microcopy">{brief.language}</p>
         </div>
       )}
+      <VideoBudget policy={data.production} refresh={refresh} />
       <form
         className="stacked-form studio-generate"
         key={brief.version}
@@ -687,6 +689,7 @@ function IdeaReview({ idea, refresh }: { idea: Idea; refresh: () => Promise<void
                   idea.concept,
                   'SCRIPT',
                   idea.script,
+                  'FREE-ONLY PRODUCTION: Flow Veo 3.1 Lite, 10 credits per output, one output per scene. Four scenes = 40 credits + 10 retry reserve; five = 50 credits with no retries. Check actual model price and remaining free balance first. No paid top-ups. Use free editing to assemble short source clips. Only one approved idea fits this daily budget. Rendering is not connected.',
                   'SCENES',
                   ...idea.scenes.map(
                     (s, i) => i + 1 + '. ' + s.seconds + 's: ' + s.visual + '\n' + s.narration,

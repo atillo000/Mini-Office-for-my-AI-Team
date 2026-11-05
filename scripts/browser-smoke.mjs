@@ -100,6 +100,7 @@ const freePort = () =>
 const apiPort = await freePort();
 const clientPort = await freePort();
 const processes = [];
+const serverLogs = [];
 function start(args, env) {
   const child = spawn(process.execPath, args, {
     cwd: root,
@@ -109,6 +110,11 @@ function start(args, env) {
     stdio: 'pipe',
   });
   processes.push(child);
+  for (const stream of [child.stdout, child.stderr])
+    stream.on('data', (data) => {
+      serverLogs.push(data.toString().slice(-2000));
+      if (serverLogs.length > 20) serverLogs.shift();
+    });
   return child;
 }
 start(['--import', 'tsx', 'server/index.ts'], {
@@ -118,17 +124,10 @@ start(['--import', 'tsx', 'server/index.ts'], {
   COMPANY_DB: databasePath,
   OFFICE_OFFLINE: '1',
 });
-start(
-  [
-    'node_modules/vite/bin/vite.js',
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(clientPort),
-    '--strictPort',
-  ],
-  { API_URL: `http://127.0.0.1:${apiPort}` },
-);
+start(['--import', 'tsx', 'scripts/dev-client.ts'], {
+  API_URL: `http://127.0.0.1:${apiPort}`,
+  DEV_UI_PORT: String(clientPort),
+});
 async function ready(url) {
   for (let i = 0; i < 100; i++) {
     try {
@@ -141,6 +140,7 @@ async function ready(url) {
   throw new Error(`Server did not start: ${url}`);
 }
 let browser;
+let qaPage;
 const errors = [];
 const checks = [];
 try {
@@ -154,6 +154,7 @@ try {
     args: ['--enable-unsafe-swiftshader'],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+  qaPage = page;
   await page.addInitScript(() =>
     Object.defineProperty(navigator, 'clipboard', {
       value: {
@@ -222,6 +223,15 @@ try {
   const startPanel = page.locator('.start-panel');
   await startPanel.getByRole('button', { name: 'Set up my video project', exact: true }).click();
   await startPanel.getByRole('heading', { name: 'AI Video Studio', exact: true }).waitFor();
+  await startPanel.getByLabel('Video scene budget').selectOption('4');
+  const budget = await (
+    await page.request.get('http://127.0.0.1:' + clientPort + '/api/studio')
+  ).json();
+  assert.equal(budget.production.sceneCount, 4);
+  assert.equal(budget.production.allowPaidTopUps, false);
+  checks.push(
+    'Free-only four-scene production plan persists with 50-credit ceiling and no paid top-ups',
+  );
   assert(await startPanel.getByRole('button', { name: 'Ask team for 3 drafts' }).isDisabled());
   await startPanel.getByRole('button', { name: 'My work profile', exact: true }).click();
   assert(
@@ -375,6 +385,21 @@ try {
   );
   await page.getByRole('button', { name: 'Time logs', exact: true }).click();
   await page.getByRole('heading', { name: 'Time logs', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'After-shift planning', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Shift settings', exact: true }).click();
+  assert.equal(await page.getByLabel('Unpaid break (minutes)', { exact: true }).inputValue(), '60');
+  assert.equal(await page.getByLabel('Work target (minutes)', { exact: true }).inputValue(), '480');
+  await page.getByLabel('Automatically plan after Sprout clock-out').check();
+  await page.getByRole('button', { name: 'Save shift settings', exact: true }).click();
+  const shiftState = await (
+    await page.request.get('http://127.0.0.1:' + clientPort + '/api/shifts')
+  ).json();
+  assert.equal(shiftState.settings.enabled, true);
+  assert.equal(shiftState.settings.shareWithAI, false);
+  assert.equal(shiftState.reader.open, false);
+  checks.push(
+    'Shift target and unpaid lunch configuration persist without inventing a Sprout connection or sharing consent',
+  );
   await page.getByLabel('Work category', { exact: true }).selectOption('BUSINESS_DEVELOPMENT');
   assert(await page.getByRole('button', { name: 'Save time log for approval' }).isDisabled());
   await page.getByRole('button', { name: /^Notifications/ }).click();
@@ -397,11 +422,16 @@ try {
   await page.getByRole('button', { name: 'Close panel', exact: true }).click();
   assert.equal(await page.locator('.simulation-controls').count(), 0);
   checks.push('Schedule simulation controls removed; worker labels reflect actual work');
-  await page.getByRole('button', { name: 'Toggle day and night', exact: true }).click();
-  await page.waitForTimeout(300);
-  assert(await page.locator('.world-container').evaluate((el) => el.classList.contains('night')));
+  const lightingToggle = page.getByRole('button', { name: 'Toggle day and night', exact: true });
+  if (await page.locator('.world-container').evaluate((el) => el.classList.contains('night'))) {
+    await lightingToggle.click();
+    await page.locator('.world-container:not(.night)').waitFor();
+  }
+  await lightingToggle.click();
+  await page.locator('.world-container.night').waitFor();
   await page.screenshot({ path: 'test-results/office-night.png', fullPage: true });
-  await page.getByRole('button', { name: 'Toggle day and night', exact: true }).click();
+  await lightingToggle.click();
+  await page.locator('.world-container:not(.night)').waitFor();
   checks.push('Day and night controls');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);
@@ -434,6 +464,12 @@ try {
       2,
     ),
   );
+} catch (error) {
+  await qaPage
+    ?.screenshot({ path: 'test-results/browser-failure.png', fullPage: true })
+    .catch(() => {});
+  console.error(JSON.stringify({ browserErrors: errors, serverLogs }));
+  throw error;
 } finally {
   await browser?.close();
   for (const child of processes) {

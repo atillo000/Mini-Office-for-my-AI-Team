@@ -7,6 +7,7 @@ import type { ContentRequest, StudioSnapshot, VideoBrief, VideoIdea } from '../.
 import { WorkService } from '../work/service';
 import { projectInput } from '../work/schemas';
 import { MemoryService } from './memory';
+import { productionPolicy } from './production';
 const text = z.string().trim().min(1).max(4000);
 export const briefInput = z
   .object({
@@ -81,6 +82,7 @@ export class StudioService {
   snapshot(): StudioSnapshot {
     const id = this.store.get<{ projectId: string }>('settings', 'video_studio')?.projectId;
     return {
+      production: productionPolicy(this.store),
       profile: new MemoryService(this.store).profile(),
       project: id ? this.store.get<KnowledgeProject>('knowledge_projects', id) || null : null,
       brief: id ? this.store.get<VideoBrief>('video_briefs', id) || null : null,
@@ -236,6 +238,7 @@ export class StudioService {
     if (!project || !brief) throw new Error('Set up the video project first.');
     const memory = new MemoryService(this.store).context([project], includeProfile);
     return {
+      production: productionPolicy(this.store),
       brief,
       project: memory.projects[0],
       memory: includeProfile ? memory : null,
@@ -247,6 +250,8 @@ export class StudioService {
     };
   }
   assertRequest(request: ContentRequest) {
+    if (!request.production || digest(request.production) !== digest(productionPolicy(this.store)))
+      throw new Error('Video production budget changed; approve a fresh generation request.');
     if (
       this.store.get<VideoBrief>('video_briefs', request.brief.id)?.version !==
         request.brief.version ||
@@ -260,6 +265,12 @@ export class StudioService {
     if (!job.contentRequest) throw new Error('No approved video brief');
     this.assertRequest(job.contentRequest);
     const output = generatedIdeas.parse(raw);
+    if (
+      output.ideas.some((idea) => idea.scenes.length !== job.contentRequest!.production!.sceneCount)
+    )
+      throw new Error(
+        'AI draft scene count exceeds or differs from the approved free-credit production plan.',
+      );
     if (
       output.ideas.some(
         (idea) => idea.durationSeconds !== job.contentRequest!.brief.durationSeconds,

@@ -212,7 +212,7 @@ export function SettingsPanel() {
 }
 export function BriefingPanel() {
   const s = useOffice();
-  const jobs = (s.snapshot?.jobs || []).filter((j) => j.kind !== 'content-ideas' && j.kind !== 'assistant-chat' && j.kind !== 'communication-review');
+  const jobs = (s.snapshot?.jobs || []).filter((j) => j.kind !== 'content-ideas' && j.kind !== 'assistant-chat' && j.kind !== 'communication-review' && j.kind !== 'shift-review');
   const completed = jobs.filter((j) => j.state === 'COMPLETED');
   const pending = jobs.filter((j) => ['REVIEW', 'DRAFT', 'AWAITING_APPROVAL'].includes(j.state));
   const active = jobs.filter((j) =>

@@ -7,12 +7,14 @@ A local, interactive AI office built with React, TypeScript, Vite, React Three F
 Requires Node.js 24+ and npm. From PowerShell:
 
 ```powershell
-Set-Location 'D:\Carl\Personal\AI Team'
+Set-Location 'D:\Carl\Personal\AI Team\Mini-Office-for-my-AI-Team'
 npm install
 npm run dev
 ```
 
 Open **http://127.0.0.1:5173**. The API runs on **http://127.0.0.1:3001**. SQLite data is saved in `.data/company.sqlite`. No cloud deployment is needed.
+
+Development startup waits for the API's health response before starting Vite. You should see **Waiting for API**, then **API ready. Starting office UI.** The proxy uses `API_URL` when supplied, otherwise the backend `HOST`/`PORT` from `.env` (default 127.0.0.1:3001). Optional `DEV_UI_PORT` selects a different frontend port. If the API cannot start within 60 seconds, the frontend reports the failure; inspect the `[API]` output or run `npm run dev:server` alone. A brief connection refusal from older startup code means the API was still starting, not that mailbox sign-in failed.
 
 For the production build served by Fastify:
 
@@ -44,19 +46,21 @@ Read and edit an idea, then **Approve idea**, **Request changes** or **Reject**.
 
 ## Real team and action inbox
 
+After-shift Zoho planning uses your signed-in Sprout attendance reader and real AI allocation reviews. The default is eight work hours plus one unpaid lunch hour. Clock-out prepares a proposed allocation for review; Zoho submissions still require exact approval. Video brainstorming now uses a free-only Flow policy with four or five scenes and a 50-credit ceiling. See [shift planning and video budget setup](docs/shift-planning-and-video-budget.md).
+
 The office now reflects real saved jobs. Schedule simulations, synthetic chat replies and synthetic integration execution are disabled. Sending a message runs a durable read-only Codex chat; replies require a completed CLI receipt. The 3D view remains a visual interface to actual work.
 
 The bell opens a unified action inbox for approvals, real AI replies, Outlook messages, failures and provider receipts. Click an item to open its exact review or conversation. Optional desktop notifications work while the app is open. Opening an alert never approves an action.
 
-Connected accounts includes guided Microsoft Graph and Zoho OAuth setup. Outlook can sync the whole Inbox with durable pagination/delta progress and local project-number matching. Selected-email AI reviews require an explicit sharing choice. Replies and Zoho time logs remain drafts until approval of their exact contents. Time routing follows numbered approved projects, SIN_TecSurge_General and SIN_TecSurge_BusinessDevelopment for proposal-stage prototyping. No work duration is inferred from emails.
+Outlook and Teams have real read-only browser readers: sign in in their dedicated Edge windows, select messages, and explicitly share a capture for a real AI urgency report and local reply drafts. Watching checks the selected view every minute. Only rendered messages are covered; other chats and unloaded history are not checked. Review and copy replies, then send them manually. The app cannot send Outlook or Teams messages. See the [browser reader guide](docs/browser-readers.md).
 
-See [account setup, workflow, API sources and verification limits](docs/accounts-and-actions.md). Your existing Windows Outlook login does not automatically authorize the app; client setup and consent are still required before live account access.
+Optional Microsoft Graph setup supports paginated read-only Inbox sync and local project-number matching. Zoho OAuth supports live project/task discovery and time-log submission after exact-draft approval. Time routing follows numbered approved projects, SIN_TecSurge_General and SIN_TecSurge_BusinessDevelopment for proposal-stage prototyping. No work duration is inferred from emails. See [account setup, workflow, API sources and verification limits](docs/accounts-and-actions.md).
 
 ## Work knowledge and connected applications
 
 The extension's **Phase 1 (integration foundation)** and **Phase 2 (work knowledge)** are available from the office sidebar and daily CEO briefing. Register work projects and your role, confirm Zoho mappings, enter activities or supplied messages, classify locally, correct individual decisions and separately approve reusable rules. Connected Applications exposes saved routing modes, actual capabilities, operation history. Simulation execution is disabled.
 
-Outlook and Zoho account connectors are implemented with separate OAuth setup; neither is claimed connected before authorization. Teams remains unconnected. Classification uses local data. Confirmed work profiles and selected linked project descriptions can be shared with a real AI task only through its explicit context choice; unrelated messages, time logs and mappings are excluded. Browser automation and Teams access remain separate work. Outlook replies and Zoho time-log submissions require the exact-draft approval flow described above. See [implementation, supported operations and run commands](docs/work-intelligence.md).
+Outlook and Teams browser readers use normal user sign-in without an Entra app registration. Optional Outlook Graph and Zoho API connectors require separate OAuth setup; neither is claimed connected before authorization. Classification uses local data. Confirmed work profiles and selected linked project descriptions can be shared with a real AI task only through its explicit context choice; unrelated messages, time logs and mappings are excluded. Replies remain local for manual sending; Zoho time-log submissions require exact-draft approval. See [implementation, supported operations and run commands](docs/work-intelligence.md).
 
 ## Real agents
 
@@ -102,7 +106,7 @@ Same-origin requests are enforced, WebSockets require expiring one-time tickets,
 
 Optional variables: `HOST`, `PORT`, `CEO_TOKEN`, `DOCKER_BIN`, `CODEX_AUTH_VOLUME`, `CODEX_API_KEY`, `AGENT_IMAGE`, `COMPANY_DB`, `WEATHER_LAT`, `WEATHER_LON`. `API_URL` changes Vite’s API proxy. `.env` loads automatically for the backend.
 
-Company messages stay inside SQLite. `server/integrations/email.ts` defines a provider and approval boundary for a future external email integration; no external provider is configured or called.
+Company messages, captured external messages, reports and local drafts are stored in SQLite. Explicitly shared captures are also retained in review-job artifacts and sent to the configured model. Managed Edge profiles beside the database retain normal sign-in state. Protect the database, profiles, credential vault and job artifacts as private account data.
 
 ## Source map
 
@@ -144,4 +148,4 @@ Verified on November 4, 2026: a real signed-in Codex job edited the private fixt
 
 ## Current scope
 
-The five implementation areas are present as an initial local release. The scene uses refined original procedural assets and contextual joint animations rather than downloaded character models. Navigation uses a clearance grid, resource reservations, and local yielding/replanning; larger teams may require additional furniture, equipment, or navigation tuning. Browser reopening reconstructs the current schedule from persisted simulation timestamps and retains the last ten office history entries per employee; transient interaction phases are reconstructed rather than replayed while the browser was closed. Real development data is persisted independently. Social relationship modeling, remote TLS, external email providers, multi-owner access, automatic merging/deployment, and parallel jobs are outside this version.
+The scene uses original procedural assets and displays actual saved job activity; schedule simulation is disabled. Real development jobs, communications reviews, video-idea drafts and work knowledge persist independently. Browser readers cover the selected rendered view only. Automatic email/chat sending, video rendering or posting, social relationship modeling, remote TLS, multi-owner access, automatic merging/deployment and parallel jobs are outside this version.

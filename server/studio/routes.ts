@@ -6,6 +6,7 @@ import type { Job } from '../../shared/types';
 import { digest } from '../agents/artifacts';
 import { MemoryService } from './memory';
 import { contentOf, contentScope, StudioService } from './service';
+import { saveProductionPolicy } from './production';
 export function registerStudioRoutes(
   app: FastifyInstance,
   store: Store,
@@ -14,6 +15,11 @@ export function registerStudioRoutes(
 ) {
   const studio = new StudioService(store),
     memory = new MemoryService(store);
+  app.put('/api/studio/production', async (request) => {
+    const value = saveProductionPolicy(store, request.body);
+    changed();
+    return value;
+  });
   app.get('/api/studio', async () => {
     const snapshot = studio.snapshot();
     return {

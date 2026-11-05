@@ -100,7 +100,11 @@ describe('Video studio and work memory', () => {
     const { studio } = setup();
     const contentRequest = studio.request(false);
     const job = { id: 'generation', projectId: contentRequest.project.id, contentRequest } as Job;
-    const content = contentOf(studio.snapshot().ideas[0]);
+    const starter = contentOf(studio.snapshot().ideas[0]);
+    const content = {
+      ...starter,
+      scenes: Array.from({ length: 5 }, (_, i) => ({ ...starter.scenes[i % 3], seconds: 12 })),
+    };
     expect(() =>
       studio.generated(job, { ideas: [content, content, { ...content, status: 'APPROVED' }] }),
     ).toThrow();
@@ -178,7 +182,11 @@ async function apiFixture() {
   const store = new Store(':memory:');
   const studio = new StudioService(store);
   studio.setup();
-  const adapter = new DraftAdapter(contentOf(studio.snapshot().ideas[0]));
+  const content = contentOf(studio.snapshot().ideas[0]);
+  const adapter = new DraftAdapter({
+    ...content,
+    scenes: Array.from({ length: 5 }, (_, i) => ({ ...content.scenes[i % 3], seconds: 12 })),
+  });
   const app = await createApp(store, { skipExternal: true, token: '', adapter });
   apps.push(app);
   return { store, studio, adapter, app };

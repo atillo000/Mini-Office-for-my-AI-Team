@@ -13,7 +13,7 @@ export function EmployeePanel({ id }: { id: string }) {
   const e = useOffice((s) => s.employees.find((e) => e.id === id));
   const runtime = useOffice((s) => s.runtime[id]);
   const jobs = (useOffice((s) => s.snapshot?.jobs) || []).filter(
-    (j) => j.kind !== 'content-ideas' && j.kind !== 'assistant-chat' && j.kind !== 'communication-review',
+    (j) => j.kind !== 'content-ideas' && j.kind !== 'assistant-chat' && j.kind !== 'communication-review' && j.kind !== 'shift-review',
   );
   const s = useOffice();
   const [tab, setTab] = useState('chat');

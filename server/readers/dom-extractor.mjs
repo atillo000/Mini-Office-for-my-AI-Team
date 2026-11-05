@@ -79,7 +79,8 @@ export const capture = ({ provider, mode }) => {
   const messages = nodes
     .slice(-50)
     .map((node) => {
-      const envelope = provider === 'teams' ? node.closest('[data-tid="chat-pane-item"]') || node : node;
+      const envelope =
+        provider === 'teams' ? node.closest('[data-tid="chat-pane-item"]') || node : node;
       const body =
         provider === 'teams'
           ? node.querySelector(
@@ -96,7 +97,11 @@ export const capture = ({ provider, mode }) => {
         author: text(
           envelope.querySelector('[data-tid="message-author-name"], [data-tid="message-author"]'),
         ).slice(0, 200),
-        sentAt: envelope.querySelector('time')?.getAttribute('datetime') || envelope.querySelector('[data-tid="timestamp"]')?.getAttribute('title') || envelope.querySelector('time')?.getAttribute('title') || '',
+        sentAt:
+          envelope.querySelector('time')?.getAttribute('datetime') ||
+          envelope.querySelector('[data-tid="timestamp"]')?.getAttribute('title') ||
+          envelope.querySelector('time')?.getAttribute('title') ||
+          '',
         preview: provider === 'outlook' && mode === 'LIST',
       };
     })

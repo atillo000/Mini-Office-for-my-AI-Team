@@ -7,6 +7,7 @@ import { digest } from '../agents/artifacts';
 import { redact } from '../process';
 import { ideasOutputSchema, StudioService } from './service';
 import { memoryPrompt } from './memory';
+import { productionInstructions } from './production';
 export async function generateVideoIdeas(
   store: Store,
   job: Job,
@@ -74,7 +75,7 @@ export async function generateVideoIdeas(
     log(`${role.id}: ${task.title}\n`);
     const response = await adapter.execute(
       job.workspace,
-      `${base}\nYou are ${employee.name} (${employee.role}). ${role.task}\nPRIOR TEAM DISCUSSION:\n${transcript.join('\n\n')}`,
+      `${base}\n${productionInstructions(request.production!)}\nYou are ${employee.name} (${employee.role}). ${role.task}\nPRIOR TEAM DISCUSSION:\n${transcript.join('\n\n')}`,
       signal,
       log,
       job.id,

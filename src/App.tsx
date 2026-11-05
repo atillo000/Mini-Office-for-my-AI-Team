@@ -108,7 +108,7 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const weather = s.snapshot?.weather;
   useEffect(() => {
-    if (!s.autoLighting) return;
+    if (!useOffice.getState().autoLighting) return;
     const hour = Number(
       new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
@@ -121,7 +121,9 @@ export default function App() {
   const WeatherIcon =
     weather?.condition === 'rainy' ? CloudRain : weather?.condition === 'cloudy' ? Cloud : Sun;
   const currentRoom = rooms.find((r) => r.id === s.room);
-  const unread = s.snapshot?.messages.filter((m) => m.mode !== 'simulation' && !m.read && m.sender !== 'ceo').length || 0;
+  const unread =
+    s.snapshot?.messages.filter((m) => m.mode !== 'simulation' && !m.read && m.sender !== 'ceo')
+      .length || 0;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -324,7 +326,7 @@ export default function App() {
                 <button
                   title={s.night ? 'Day lighting' : 'Night lighting'}
                   aria-label="Toggle day and night"
-                  onClick={() => s.patch({ night: !s.night, autoLighting: false })}
+                  onClick={s.toggleLighting}
                 >
                   {s.night ? <Moon size={16} /> : <Sun size={17} />}
                 </button>

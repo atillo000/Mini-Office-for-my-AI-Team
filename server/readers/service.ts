@@ -131,7 +131,13 @@ export class ReaderService {
             firstSeenAt: old?.firstSeenAt || observedAt,
             observedAt,
             version: old
-              ? old.version + (old.text === entry.text && old.author === entry.author ? 0 : 1)
+              ? old.version +
+                (old.text === entry.text &&
+                old.author === entry.author &&
+                old.sentAt === entry.sentAt &&
+                old.preview === entry.preview
+                  ? 0
+                  : 1)
               : 1,
           };
           messages.push(value);

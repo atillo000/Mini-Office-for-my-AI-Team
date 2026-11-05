@@ -104,7 +104,9 @@ export interface Job {
     | 'meeting'
     | 'content-ideas'
     | 'assistant-chat'
-    | 'communication-review';
+    | 'communication-review'
+    | 'shift-review';
+  shiftRequest?: import('./shifts').ShiftRequest;
   communicationRequest?: import('./reader').CommunicationRequest;
   memory?: import('./studio').SharedMemory;
   contentRequest?: import('./studio').ContentRequest;

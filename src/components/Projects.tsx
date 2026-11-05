@@ -426,7 +426,7 @@ export function ProjectsPanel() {
   const [filter, setFilter] = useState('all');
   const action = useAction();
   const projects = s.snapshot?.projects || [];
-  const jobs = (s.snapshot?.jobs || []).filter((j) => j.kind !== 'content-ideas' && j.kind !== 'assistant-chat' && j.kind !== 'communication-review');
+  const jobs = (s.snapshot?.jobs || []).filter((j) => j.kind !== 'content-ideas' && j.kind !== 'assistant-chat' && j.kind !== 'communication-review' && j.kind !== 'shift-review');
   const selectedJob = jobs.find((j) => j.id === selected);
   return (
     <div className="panel-content">
