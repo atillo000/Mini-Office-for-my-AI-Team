@@ -9,9 +9,11 @@ import { ConnectionsPanel } from './AccountConnections';
 import { ActionInbox } from './ActionInbox';
 import { TimeLogs } from './TimeLogs';
 import { StartHere } from './StartHere';
+import { MyProjects } from './MyProjects';
 export { EmployeePanel } from './People';
 export function Panels({ panel }: { panel: Panel }) {
   if (panel === 'start') return <StartHere />;
+  if (panel === 'focus') return <MyProjects />;
   if (panel === 'team') return <TeamPanel />;
   if (panel === 'projects') return <ProjectsPanel />;
   if (panel === 'inbox') return <TeamInbox />;

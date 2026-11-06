@@ -1,11 +1,35 @@
 import type { Store } from '../db';
 import type { Job, Message } from '../../shared/types';
 import type { VideoIdea } from '../../shared/studio';
-import type { ExternalDraft, MailItem, NotificationItem } from '../../shared/connected';
+import type {
+  ExternalDraft,
+  MailItem,
+  NotificationItem,
+  TimeLogPayload,
+} from '../../shared/connected';
+import { timeApprovalPolicy } from '../connected/timed-approval';
 import type { CapturedMessage, CommunicationReport, LocalReplyDraft } from '../../shared/reader';
 import type { ShiftPlan } from '../../shared/shifts';
+import { messageRelevance, workFocus } from '../connected/focus';
+import type { ReaderAutomationState } from '../../shared/reader';
 export function notifications(store: Store): NotificationItem[] {
   const result: Omit<NotificationItem, 'read'>[] = [];
+  for (const state of store.list<ReaderAutomationState>('reader_automation_state'))
+    if (['NEEDS_SIGN_IN', 'NEEDS_ATTENTION'].includes(state.status))
+      result.push({
+        id: 'reader-attention:' + state.provider,
+        category: 'ERROR',
+        title: state.provider + ' reader needs attention',
+        detail: state.error || 'Check the dedicated reader window.',
+        at: state.lastRunAt || 0,
+        revision: state.status + ':' + (state.error || ''),
+        target: {
+          panel: 'inbox',
+          id: 'reader-' + state.provider,
+          channel: 'external:' + state.provider,
+        },
+        actions: ['OPEN'],
+      });
   for (const job of store.list<Job>('jobs')) {
     if (job.kind === 'assistant-chat' && job.state === 'COMPLETED') continue;
     const review = ['DRAFT', 'AWAITING_APPROVAL', 'REVIEW'].includes(job.state),
@@ -50,21 +74,57 @@ export function notifications(store: Store): NotificationItem[] {
       result.push({
         id: 'external:' + draft.id,
         category:
-          draft.state === 'DRAFT'
-            ? 'APPROVAL'
-            : ['FAILED', 'UNKNOWN_OUTCOME'].includes(draft.state)
-              ? 'ERROR'
-              : 'RESULT',
-        title: draft.kind === 'EMAIL_REPLY' ? 'Review Outlook reply' : 'Review Zoho time log',
+          draft.autoApproval?.status === 'BLOCKED' && draft.state === 'DRAFT'
+            ? 'ERROR'
+            : draft.state === 'DRAFT'
+              ? 'APPROVAL'
+              : ['FAILED', 'UNKNOWN_OUTCOME'].includes(draft.state)
+                ? 'ERROR'
+                : 'RESULT',
+        title:
+          draft.kind === 'EMAIL_REPLY'
+            ? 'Review Outlook reply'
+            : 'Zoho time log · ' +
+              (draft.payload as TimeLogPayload).date +
+              ' · ' +
+              (draft.state === 'SUBMITTED'
+                ? 'Submitted'
+                : draft.autoApproval?.status === 'BLOCKED'
+                  ? 'Needs attention'
+                  : draft.state === 'DRAFT'
+                    ? 'Review window'
+                    : draft.state.replaceAll('_', ' ').toLowerCase()),
         detail:
-          draft.state +
+          (draft.kind === 'TIME_LOG'
+            ? (draft.payload as TimeLogPayload).projectName +
+              ' · ' +
+              (draft.payload as TimeLogPayload).durationMinutes / 60 +
+              ' h' +
+              (draft.state === 'DRAFT' &&
+              draft.autoApproval?.status === 'SCHEDULED' &&
+              timeApprovalPolicy(store).enabled
+                ? ' · Auto-submits ' +
+                  new Intl.DateTimeFormat('en-PH', {
+                    timeZone: 'Asia/Manila',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }).format(draft.autoApproval.dueAt)
+                : '')
+            : draft.state) +
           ' · ' +
           (draft.error ||
             (draft.kind === 'EMAIL_REPLY'
               ? (draft.payload as { subject: string }).subject
               : (draft.payload as { description: string }).description)),
         at: draft.updatedAt,
-        revision: draft.state + ':' + draft.version,
+        revision:
+          draft.state +
+          ':' +
+          draft.version +
+          ':' +
+          (draft.autoApproval?.status || '') +
+          ':' +
+          (draft.autoApproval?.dueAt || ''),
         target: { panel: draft.kind === 'EMAIL_REPLY' ? 'inbox' : 'timelogs', id: draft.id },
         actions: [draft.state === 'DRAFT' ? 'REVIEW' : 'OPEN'],
       });
@@ -75,7 +135,15 @@ export function notifications(store: Store): NotificationItem[] {
     )
     .all(syncAccount || '') as { data: string }[];
   for (const mail of mailRows.map((r) => JSON.parse(r.data) as MailItem))
-    if (!mail.removed && mail.account === syncAccount)
+    if (
+      !mail.removed &&
+      mail.account === syncAccount &&
+      messageRelevance(store, {
+        provider: 'outlook',
+        scope: mail.subject,
+        text: mail.projectNumbers?.join(' ') || '',
+      }).relevant
+    )
       result.push({
         id: 'mail:' + mail.id,
         category: 'EMAIL',
@@ -98,7 +166,10 @@ export function notifications(store: Store): NotificationItem[] {
         target: { panel: 'inbox', id: message.id, channel: message.channel },
         actions: ['REPLY'],
       });
-  for (const message of store.list<CapturedMessage>('captured_messages').slice(-200))
+  for (const message of store
+    .list<CapturedMessage>('captured_messages')
+    .slice(-200)
+    .filter((m) => messageRelevance(store, m).relevant))
     result.push({
       id: 'captured:' + message.id,
       category: message.provider === 'outlook' ? 'EMAIL' : 'CHAT',
@@ -129,7 +200,14 @@ export function notifications(store: Store): NotificationItem[] {
   }
   for (const report of latestReports.values())
     for (const assessment of report.assessments)
-      if (assessment.urgency === 'URGENT' || assessment.urgency === 'IMPORTANT')
+      if (
+        (assessment.urgency === 'URGENT' || assessment.urgency === 'IMPORTANT') &&
+        messageRelevance(store, {
+          provider: report.provider,
+          scope: report.scope,
+          text: assessment.sourceText || '',
+        }).relevant
+      )
         result.push({
           id: 'assessment:' + report.id + ':' + assessment.messageId,
           category: assessment.urgency === 'URGENT' ? 'URGENT' : 'RESULT',
@@ -141,7 +219,14 @@ export function notifications(store: Store): NotificationItem[] {
           actions: ['OPEN'],
         });
   for (const draft of store.list<LocalReplyDraft>('local_reply_drafts'))
-    if (draft.status === 'DRAFT')
+    if (
+      draft.status === 'DRAFT' &&
+      (!workFocus(store).enabled ||
+        (() => {
+          const source = store.get<CapturedMessage>('captured_messages', draft.sourceMessageId);
+          return !!source && messageRelevance(store, source).relevant;
+        })())
+    )
       result.push({
         id: 'local-draft:' + draft.id,
         category: 'APPROVAL',

@@ -29,7 +29,7 @@ export function registerShiftRoutes(
   app.post<{ Params: { id: string } }>('/api/shifts/:id/plan', async (request) => {
     const shift = store.get<AttendanceShift>('attendance_shifts', request.params.id);
     if (!shift) throw new Error('Captured shift not found.');
-    return shifts.enqueue(shift, true);
+    return shifts.plan(shift, true);
   });
   app.post<{ Params: { id: string } }>('/api/shift-plans/:id/prepare', async (request) =>
     shifts.prepare(request.params.id, request.body),

@@ -5,13 +5,33 @@ import { useResource } from './useResource';
 import { ErrorText, Submit, useAction, post } from './common';
 import { IntegrationsPanel } from './Integrations';
 import { BrowserControls } from './BrowserReader';
+import { AutomaticReader } from './AutomaticReader';
 export function ConnectionsPanel() {
+  const [tab, setTab] = useState<'zoho' | 'outlook' | 'teams'>('zoho');
   return (
     <div className="panel-content">
-      <h2>Connected accounts</h2>
-      <BrowserControls provider="outlook" />
-      <BrowserControls provider="teams" />
-      <AccountConnections />
+      <h2>Connections</h2>
+      <nav className="panel-tabs" aria-label="Account setup">
+        {(['zoho', 'outlook', 'teams'] as const).map((provider) => (
+          <button
+            key={provider}
+            className={tab === provider ? 'active' : ''}
+            onClick={() => setTab(provider)}
+          >
+            {provider === 'zoho' ? 'Zoho' : provider === 'outlook' ? 'Outlook' : 'Teams'}
+          </button>
+        ))}
+      </nav>
+      {tab !== 'zoho' && (
+        <>
+          <AutomaticReader provider={tab} />
+          <details>
+            <summary>Manual reader controls</summary>
+            <BrowserControls provider={tab} />
+          </details>
+        </>
+      )}
+      {tab !== 'teams' && <AccountConnections provider={tab} />}
       <p className="microcopy">
         Outlook and Teams use dedicated signed-in browser readers with local drafts only. Zoho
         time-log submission still requires approval of each exact entry.
@@ -27,7 +47,7 @@ export function ConnectionsPanel() {
     </div>
   );
 }
-export function AccountConnections() {
+export function AccountConnections({ provider }: { provider?: AccountProvider } = {}) {
   const { data, error, refresh } = useResource<{ accounts: AccountView[] }>('/accounts');
   useEffect(() => {
     const focus = () => void refresh();
@@ -38,20 +58,22 @@ export function AccountConnections() {
     <section className="account-connections">
       <h3>Connect your accounts</h3>
       <ErrorText error={error} />
-      {data?.accounts.map((account) =>
-        account.provider === 'outlook' ? (
-          <details key={account.provider}>
-            <summary>Optional Outlook read-only Graph setup</summary>
-            <AccountSetup account={account} refresh={refresh} />
-          </details>
-        ) : (
-          <AccountSetup
-            key={account.provider + ':' + account.version + ':' + account.connected}
-            account={account}
-            refresh={refresh}
-          />
-        ),
-      )}
+      {data?.accounts
+        .filter((account) => !provider || account.provider === provider)
+        .map((account) =>
+          account.provider === 'outlook' ? (
+            <details key={account.provider}>
+              <summary>Optional Outlook read-only Graph setup</summary>
+              <AccountSetup account={account} refresh={refresh} />
+            </details>
+          ) : (
+            <AccountSetup
+              key={account.provider + ':' + account.version + ':' + account.connected}
+              account={account}
+              refresh={refresh}
+            />
+          ),
+        )}
     </section>
   );
 }

@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Store } from '../db';
 import type { AccountConfig, AccountProvider, AccountView } from '../../shared/connected';
 import { CredentialVault, type Secrets } from './vault';
+import { redact } from '../process';
 export type Http = typeof fetch;
 export const regions: Record<string, { accounts: string; projects: string }> = {
   com: { accounts: 'https://accounts.zoho.com', projects: 'https://projects.zoho.com' },
@@ -43,11 +44,32 @@ export class ProviderError extends Error {
     public status: number,
     public requestId = '',
     public uncertain = false,
+    public context?: {
+      provider: AccountProvider;
+      method: string;
+      path: string;
+      code?: string;
+      detail?: string;
+    },
   ) {
     super(
-      'Provider request failed (' +
-        status +
-        '). Check account consent, permissions and connection status.',
+      context
+        ? context.provider +
+            ' ' +
+            context.method +
+            ' ' +
+            context.path +
+            ' returned HTTP ' +
+            status +
+            (context.code ? ' (' + context.code + ')' : '') +
+            '. ' +
+            (context.detail ||
+              (status === 401 || status === 403
+                ? 'Check account authorization and permissions.'
+                : status >= 500
+                  ? 'The provider could not process this request; this does not establish a permission problem.'
+                  : 'Check the request details.'))
+        : 'Provider request failed (' + status + ').',
     );
   }
 }
@@ -336,12 +358,39 @@ export class Accounts {
     } catch {
       throw new ProviderError(0, '', !!options.method && options.method !== 'GET');
     }
-    if (!response.ok)
+    if (!response.ok) {
+      let code: string | undefined, detail: string | undefined;
+      try {
+        const data = await response.json();
+        const error = data.error || data.errors?.[0] || data;
+        code =
+          typeof error.code === 'string' || typeof error.code === 'number'
+            ? String(error.code).slice(0, 80)
+            : undefined;
+        detail =
+          typeof error.message === 'string' ? redact(error.message).slice(0, 300) : undefined;
+      } catch {
+        /* HTML and unreadable provider errors are not displayed. */
+      }
+      const context = {
+        provider,
+        method: options.method?.toUpperCase() || 'GET',
+        path: url.pathname,
+        code,
+        detail,
+      };
+      this.store.put('provider_failures', provider, {
+        ...context,
+        status: response.status,
+        at: Date.now(),
+      });
       throw new ProviderError(
         response.status,
         response.headers.get('request-id') || '',
         response.status >= 500,
+        context,
       );
+    }
     return response;
   }
 }

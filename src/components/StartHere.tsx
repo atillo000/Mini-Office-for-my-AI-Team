@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Check, Download, Film, Sparkles } from 'lucide-react';
+import { Check, Download, Sparkles } from 'lucide-react';
 import type {
   StudioSnapshot,
   VideoBrief,
@@ -12,6 +12,7 @@ import { useOffice } from '../store';
 import { useResource } from './useResource';
 import { ErrorText, Status, Submit, useAction, post, dateTime } from './common';
 import { VideoBudget } from './VideoBudget';
+import { WorkflowGuide } from './WorkflowGuide';
 
 type Idea = VideoIdea & { contentHash: string };
 type Studio = Omit<StudioSnapshot, 'ideas'> & {
@@ -78,86 +79,17 @@ export function StartHere() {
       ) : (
         <>
           {tab === 'guide' && (
-            <>
-              <div className="work-actions">
-                <button
-                  className="text-button"
-                  onClick={() => useOffice.getState().open('connections')}
-                >
-                  Connect Outlook and Zoho
-                </button>
-                <button
-                  className="text-button"
-                  onClick={() => useOffice.getState().open('notifications')}
-                >
-                  Open action inbox
-                </button>
-                <button
-                  className="text-button"
-                  onClick={() => useOffice.getState().open('timelogs')}
-                >
-                  My time logs
-                </button>
-              </div>
-              <h3>Give direction. Let the team propose ideas.</h3>
-              <p>
-                Your video team will discuss horror, comedy, drama and other original ideas with
-                broad Filipino appeal—“patok sa masa.” You choose which drafts to approve.
-              </p>
-              <ol className="guide-steps">
-                <li>
-                  <strong>Tell the team about you</strong>
-                  <p>
-                    Save your goals, responsibilities and routines in My work profile. Share it with
-                    an AI task when useful.
-                  </p>
-                  <button className="text-button" onClick={() => setTab('profile')}>
-                    Open my profile <ArrowRight size={13} />
-                  </button>
-                </li>
-                <li>
-                  <strong>Ask for video drafts</strong>
-                  <p>
-                    Your project manager proposes directions, your analyst reviews audience appeal,
-                    and your writer creates scripts and scene plans. You do not need to choose a
-                    topic first.
-                  </p>
-                  <button
-                    className="text-button"
-                    onClick={async () => {
-                      if (!data.project) {
-                        const result = await action.execute(
-                          () => post('/studio/setup', {}),
-                          'AI Video Studio set up',
-                        );
-                        if (!result) return;
-                        await refresh();
-                      }
-                      setTab('videos');
-                    }}
-                    disabled={action.busy}
-                  >
-                    <Film size={14} />
-                    {data.project ? 'Open Video ideas' : 'Set up my video project'}
-                  </button>
-                </li>
-                <li>
-                  <strong>Review and teach</strong>
-                  <p>
-                    Read a draft, edit it, approve it or ask for changes. Choose “Remember this
-                    feedback” to guide future brainstorming.
-                  </p>
-                </li>
-              </ol>
-              <p className="studio-boundary">
-                Available now: team discussions, scripts and idea approvals. Video rendering and
-                YouTube/Facebook posting are not connected yet. Posting will need a separate
-                approval.
-              </p>
-              <button className="text-button" onClick={() => useOffice.getState().open('assign')}>
-                Create a coding task instead <ArrowRight size={13} />
-              </button>
-            </>
+            <WorkflowGuide
+              videoLabel={data.project ? 'Open Video ideas' : 'Set up my video project'}
+              onVideos={async () => {
+                if (!data.project) {
+                  const result = await action.execute(() => post('/studio/setup', {}));
+                  if (!result) return;
+                  await refresh();
+                }
+                setTab('videos');
+              }}
+            />
           )}
           {tab === 'profile' && (
             <ProfileEditor key={data.profile.version} profile={data.profile} refresh={refresh} />

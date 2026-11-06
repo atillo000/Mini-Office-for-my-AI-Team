@@ -100,6 +100,6 @@ export function dateTime(at: number) {
     minute: '2-digit',
   });
 }
-export async function post(path: string, data: unknown = {}) {
-  return api(path, { method: 'POST', body: JSON.stringify(data) });
+export async function post<T = unknown>(path: string, data: unknown = {}) {
+  return api<T>(path, { method: 'POST', body: JSON.stringify(data) });
 }

@@ -13,6 +13,7 @@ import type {
 import type { JobQueue } from '../agents/queue';
 import { enqueueCommunication } from './review';
 import { allowedReaderUrl, ReaderError, type ReaderDriver } from './browser';
+import { focusContext, messageRelevance } from '../connected/focus';
 export class ReaderService {
   private busy = new Set<ReaderProvider>();
   private watches = new Map<
@@ -57,12 +58,12 @@ export class ReaderService {
     this.pending.add(task);
     void task.finally(() => this.pending.delete(task));
   }
-  async open(provider: ReaderProvider) {
+  async open(provider: ReaderProvider, background = false) {
     if (this.stopped || this.busy.has(provider))
       throw new Error('Reader is busy. Try again when the current capture finishes.');
     this.busy.add(provider);
     try {
-      await this.driver.open(provider);
+      await this.driver.open(provider, { background });
       this.watches.delete(provider);
       return this.save({
         ...this.state(provider),
@@ -113,6 +114,7 @@ export class ReaderService {
       const observedAt = Date.now(),
         messages: CapturedMessage[] = [],
         fresh: CapturedMessage[] = [];
+      const seen = new Set<string>();
       this.store.transaction(() => {
         for (const entry of view.messages) {
           if (!entry.text.trim()) continue;
@@ -121,6 +123,8 @@ export class ReaderService {
             scope: view.scope,
             sourceId: entry.sourceId || entry.text,
           });
+          if (seen.has(id)) continue;
+          seen.add(id);
           const old = this.store.get<CapturedMessage>('captured_messages', id);
           const value: CapturedMessage = {
             ...entry,
@@ -169,13 +173,15 @@ export class ReaderService {
           (view.truncated ? ' Long text or additional rows were omitted by capture limits.' : ''),
       };
       this.store.put('reader_snapshots', snapshot.id, snapshot);
+      const context = focusContext(this.store);
+      const reviewMessages = messages.filter((m) => messageRelevance(this.store, m).relevant);
       let jobId: string | undefined;
-      const needsReview = messages.some(
+      const needsReview = reviewMessages.some(
         (m) =>
           this.store.get<{ version: number }>('reader_review_requested', m.id)?.version !==
           m.version,
       );
-      if (share && (!watched || needsReview)) {
+      if (share && reviewMessages.length && (!watched || needsReview)) {
         const running = this.store
           .list<import('../../shared/types').Job>('jobs')
           .some(
@@ -185,13 +191,34 @@ export class ReaderService {
               ['QUEUED', 'RUNNING'].includes(j.state),
           );
         if (!running) {
-          const request: CommunicationRequest = { snapshot, messages, consentHash: '' };
-          request.consentHash = digest({ snapshot, messages });
+          const reviewSnapshot = {
+            ...snapshot,
+            id: crypto.randomUUID(),
+            messageIds: reviewMessages.map((m) => m.id),
+            hash: digest(reviewMessages),
+            coverage:
+              snapshot.coverage +
+              ' Work focus selected ' +
+              reviewMessages.length +
+              ' message(s) for AI review.',
+          };
+          this.store.put('reader_snapshots', reviewSnapshot.id, reviewSnapshot);
+          const request: CommunicationRequest = {
+            snapshot: reviewSnapshot,
+            messages: reviewMessages,
+            consentHash: '',
+            focus: {
+              numbers: context.numbers,
+              selfNames: context.settings.selfNames,
+              notice: context.notice,
+            },
+          };
+          request.consentHash = digest({ snapshot: reviewSnapshot, messages: reviewMessages });
           const job = enqueueCommunication(this.store, this.queue.adapter, request);
           jobId = job.id;
           this.queue.save(job);
           void this.queue.drain();
-          for (const message of messages)
+          for (const message of reviewMessages)
             this.store.put('reader_review_requested', message.id, {
               version: message.version,
               jobId: job.id,
@@ -207,6 +234,13 @@ export class ReaderService {
         watching: !!this.watches.get(provider),
         lastReadAt: observedAt,
         lastError: undefined,
+        lastNotice: context.settings.enabled
+          ? reviewMessages.length +
+            ' of ' +
+            messages.length +
+            ' captured messages match your work focus. ' +
+            context.notice
+          : undefined,
       });
       return { snapshot, newMessages: fresh.length, jobId };
     } catch (error) {

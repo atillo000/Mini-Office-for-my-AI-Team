@@ -1,5 +1,17 @@
 # Read Outlook and Teams in your signed-in browser
 
+## Automatic mode
+
+Enable **Let my team open, navigate and check this account automatically when the app starts** in Inbox or Connections for each provider. Enable the separate AI-review option for actual urgency reports and local drafts. These preferences persist. When the backend starts, it opens the dedicated saved Edge profiles and periodically navigates the visible work views without requiring Open browser or Capture clicks.
+
+Outlook checks rendered inbox previews and searches selected verified project numbers. Teams visits a bounded set of rendered conversation-list entries, prioritizing selected project names/numbers and rotating the remaining entries between checks. Each cycle covers at most eight views. New matching text is batched into one durable review per provider at a time. Unchanged captured content is not repeatedly sent to the model, even when Outlook changes its row IDs. The state shows successful and unavailable views; this is not a full mailbox/all-history sync.
+
+The Microsoft session in the dedicated profile is reused. Windows account sync may help normal sign-in, but the reader does not copy another browser's cookies or override organizational restrictions. Password, MFA and consent prompts require your action. A notification links to the reader when attention is needed. The team retries while automatic mode remains enabled. Pause it to stop background navigation and queued automatic reviews.
+
+The backend must remain running in an interactive desktop session. The dedicated browser windows are separate from your ordinary browser. Automatic opening does not authorize sending mail, creating provider drafts or posting Teams messages.
+
+The steps below describe optional manual controls for troubleshooting or a one-off capture. Pause automatic mode before using manual capture or watch controls so its next check does not move your selected view.
+
 Use **Inbox → Outlook** or **Inbox → Teams**. These browser readers use real visible messages and real Codex review jobs. They do not require a Microsoft application registration. Normal sign-in, MFA and your organization's access restrictions still apply.
 
 ## First use
@@ -19,7 +31,7 @@ The notification bell opens the action inbox. New captured messages, important/u
 
 Captures cover only rendered text: up to 50 rows/messages, 6,000 characters per message and 48,000 total. Mail-list captures are previews. Other folders, other chats, unloaded history, attachments, hidden content and text in images are not reviewed. There is no claim that the whole inbox or all Teams conversations were checked. Scroll or open another conversation yourself and capture it to review more. Repeated reviews preserve existing local drafts for unchanged source versions, including your edits and archived drafts.
 
-The reader does not click provider controls, type credentials, extract tokens, create provider drafts or send messages. If organizational policy prevents sign-in or reading, it reports that condition. This is not a way to override denied permissions.
+Automatic mode uses normal read/navigation controls such as project search and conversation selection. It never types credentials, extracts tokens, creates provider drafts or sends messages. If organizational policy prevents sign-in or reading, it reports that condition.
 
 ## Why not the C# Outlook library?
 

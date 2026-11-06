@@ -4,6 +4,8 @@ A local, interactive AI office built with React, TypeScript, Vite, React Three F
 
 ## Launch locally
 
+New to the app? Read the [complete step-by-step user guide](docs/user-guide.md), or open **Start here → How it works** inside the office. Daily navigation follows Connections → My projects → Inbox → Notifications → Time logs.
+
 Requires Node.js 24+ and npm. From PowerShell:
 
 ```powershell

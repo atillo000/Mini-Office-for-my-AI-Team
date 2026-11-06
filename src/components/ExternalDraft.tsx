@@ -1,13 +1,21 @@
 import { useState } from 'react';
-import type { ExternalDraft as Draft, ReplyPayload, TimeLogPayload } from '../../shared/connected';
+import type {
+  ExternalDraft as Draft,
+  ReplyPayload,
+  TimeLogPayload,
+  TimeApprovalPolicy,
+} from '../../shared/connected';
 import { api } from '../api';
 import { ErrorText, useAction, Status, post } from './common';
+import { TimeApprovalCountdown } from './TimeApprovalCountdown';
 export function ExternalDraftReview({
   draft,
   refresh,
+  timePolicy,
 }: {
   draft: Draft;
   refresh: () => Promise<void>;
+  timePolicy?: TimeApprovalPolicy;
 }) {
   const action = useAction(),
     [body, setBody] = useState(
@@ -27,6 +35,7 @@ export function ExternalDraftReview({
         <h3>{time ? 'Review time log' : 'Review email reply'}</h3>
         <Status state={draft.state} />
       </div>
+      {time && <TimeApprovalCountdown draft={draft} policy={timePolicy} refresh={refresh} />}
       {time && (
         <dl className="draft-details">
           {[
@@ -52,6 +61,20 @@ export function ExternalDraftReview({
             </div>
           ))}
         </dl>
+      )}
+      {time && draft.state === 'DRAFT' && (
+        <button
+          className="text-button"
+          disabled={action.busy}
+          onClick={() =>
+            void action.execute(
+              () => post('/external-drafts/' + draft.id + '/check', {}),
+              'Read-only submission checks passed. Nothing was sent.',
+            )
+          }
+        >
+          Check before submission
+        </button>
       )}
       {reply && (
         <>
@@ -183,6 +206,12 @@ export function ExternalDraftReview({
             : draft.receipt.verifiedAt
               ? ' · Zoho entry read back and verified. Organizational approval may still be pending.'
               : ''}
+        </p>
+      )}
+      {draft.approval?.mode === 'AUTO_POLICY' && (
+        <p className="microcopy">
+          Approved under your 30-minute automatic time-log policy (version{' '}
+          {draft.approval.policyVersion}).
         </p>
       )}
       {draft.error && <p className="form-error">{draft.error}</p>}

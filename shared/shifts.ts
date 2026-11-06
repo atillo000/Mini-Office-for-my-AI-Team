@@ -28,6 +28,14 @@ export interface ShiftEvidence {
   sentAt?: string;
 }
 export interface ShiftRequest {
+  zohoHistory?: {
+    state: 'CHECKED' | 'UNKNOWN';
+    checkedAt?: number;
+    loggedMinutes?: number;
+    reason?: string;
+    entries?: import('./connected').RemoteTimeLog[];
+  };
+  allocatableMinutes?: number;
   shift: AttendanceShift;
   settings: ShiftSettings;
   capacityMinutes: number;
@@ -47,6 +55,8 @@ export interface ShiftPlanRow {
   evidence: { id: string; quote: string }[];
 }
 export interface ShiftPlan {
+  workTargetMinutes?: number;
+  alreadyLoggedMinutes?: number;
   id: string;
   jobId: string;
   shiftId: string;

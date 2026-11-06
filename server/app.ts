@@ -188,6 +188,10 @@ export async function createApp(store = new Store(), options: AppOptions = {}) {
     return { ticket };
   });
   registerWorkRoutes(app, store, broadcast, options.integrationAdapters);
+  app.get('/api/guide', async () => ({
+    title: 'Mini AI Office — step-by-step guide',
+    markdown: await readFile(path.resolve('docs/user-guide.md'), 'utf8'),
+  }));
   registerStudioRoutes(app, store, queue, broadcast);
   const connected = registerConnected(
     app,

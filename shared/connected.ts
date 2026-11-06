@@ -114,8 +114,35 @@ export interface ExternalDraft {
   createdAt: number;
   updatedAt: number;
   error?: string;
-  approval?: { at: number; approvedBy: 'ceo'; version: number; scopeHash: string };
+  approval?: {
+    at: number;
+    approvedBy: 'ceo';
+    version: number;
+    scopeHash: string;
+    mode?: 'MANUAL' | 'AUTO_POLICY';
+    policyVersion?: number;
+    policyHash?: string;
+  };
+  autoApproval?: {
+    status: 'SCHEDULED' | 'PAUSED' | 'BLOCKED' | 'EXECUTED';
+    dueAt: number;
+    version: number;
+    scopeHash: string;
+    policyVersion: number;
+    reason?: string;
+    resumeOnSave?: boolean;
+  };
   receipt?: { providerId?: string; requestId?: string; status: number; verifiedAt?: number };
+}
+export interface TimeApprovalPolicy {
+  enabled: boolean;
+  version: number;
+  delayMinutes: 30;
+  account?: string;
+  portalId?: string;
+  ownerId?: string;
+  ownerName?: string;
+  updatedAt?: number;
 }
 export interface NotificationItem {
   id: string;

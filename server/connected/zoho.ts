@@ -22,9 +22,21 @@ export class ZohoService {
     return base + '/projects/' + providerId(project) + '/' + kind;
   }
   async timeLogs(portalId: string, date: string, ownerId: string) {
+    return this.timeLogsRange(portalId, date, date, ownerId);
+  }
+  async timeLogsRange(portalId: string, startDate: string, endDate: string, ownerId: string) {
     providerId(portalId);
     providerId(ownerId);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Choose a work date.');
+    if (
+      ![startDate, endDate].every(
+        (date) =>
+          /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+          new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date,
+      ) ||
+      endDate < startDate ||
+      Date.parse(endDate) - Date.parse(startDate) > 31 * 86400000
+    )
+      throw new Error('Choose a real work-date range of at most 32 dates.');
     const account = (await this.accounts.tokens('zoho')).account,
       logs = new Map<string, RemoteTimeLog>();
     for (const module of ['task', 'issue', 'general']) {
@@ -34,10 +46,22 @@ export class ZohoService {
           page: String(page),
           per_page: '200',
           view_type: 'customdate',
-          start_date: date,
-          end_date: date,
+          start_date: startDate,
+          end_date: endDate,
           module: JSON.stringify({ type: module }),
-          filter: JSON.stringify({ assignee: [ownerId] }),
+          // Zoho's live portal returns 500 for a partial filter containing only assignee.
+          filter: JSON.stringify({
+            assignee: [ownerId],
+            project: [],
+            billtype: [],
+            approvaltype: [],
+            tsheetperiod: [],
+            clientcompany: [],
+            content: [],
+            invoicestatus: [],
+            usergroups: [],
+            criteria: [],
+          }),
         });
         const response = await this.accounts.request(
           'zoho',
@@ -59,7 +83,8 @@ export class ZohoService {
         for (const value of entries) {
           const id = providerId(value.id),
             owner = providerId((value.owner as { zpuid?: unknown })?.zpuid);
-          if (owner !== ownerId || value.date !== date) continue;
+          const date = String(value.date || '');
+          if (owner !== ownerId || date < startDate || date > endDate) continue;
           const duration = /^(\d{1,2}):([0-5]\d)$/.exec(String(value.log_hour || ''));
           const project = value.project as { id: unknown; name?: string },
             detail = value.module_detail as { id?: unknown } | undefined;
@@ -88,7 +113,14 @@ export class ZohoService {
       if (!complete)
         throw new Error('Zoho time-log page limit reached; no complete history is claimed.');
     }
-    return { items: [...logs.values()], complete: true, account };
+    return {
+      items: [...logs.values()],
+      complete: true as const,
+      account,
+      checkedAt: Date.now(),
+      startDate,
+      endDate,
+    };
   }
   async list(kind: Resource, portal?: string, project?: string) {
     const account = (await this.accounts.tokens('zoho')).account;

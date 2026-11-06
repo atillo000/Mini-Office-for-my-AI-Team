@@ -64,6 +64,9 @@ export function TeamInbox() {
   return (
     <div className="panel-content">
       <h2>Inbox</h2>
+      <p className="microcopy">
+        Read messages and reports here. Notifications lists what needs your attention.
+      </p>
       <div className="panel-tabs">
         <button className={tab === 'outlook' ? 'active' : ''} onClick={() => setTab('outlook')}>
           Outlook

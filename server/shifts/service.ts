@@ -16,6 +16,8 @@ import {
 import { SproutBrowser, type SproutDriver } from './browser';
 import { assertShiftRequest, planRowInput, validateRows } from './review';
 import { z } from 'zod';
+import { messageRelevance } from '../connected/focus';
+import type { ExternalDraft, TimeLogPayload } from '../../shared/connected';
 export class ShiftService {
   private busy = false;
   private stopped = false;
@@ -97,7 +99,7 @@ export class ShiftService {
         for (const shift of shifts) {
           // Automatic planning covers recent clock-outs only, never a whole historical table on first connection.
           if (Date.now() - shift.clockOut <= 36 * 3600000 && capacity(shift, settings) > 0)
-            this.enqueue(shift);
+            await this.plan(shift);
         }
       this.changed();
       return this.snapshot();
@@ -109,7 +111,50 @@ export class ShiftService {
       this.busy = false;
     }
   }
-  enqueue(shift: AttendanceShift, retry = false) {
+  async plan(shift: AttendanceShift, retry = false) {
+    const settings = shiftSettings(this.store);
+    if (!settings.enabled || !settings.shareWithAI)
+      throw new Error('Enable shift planning and AI sharing first.');
+    const key = digest({
+      shiftId: shift.id,
+      version: shift.version,
+      settingsVersion: settings.version,
+    });
+    const previous = this.store.get<{ jobId: string }>('shift_requests', key);
+    if (previous && !retry) return this.store.get<Job>('jobs', previous.jobId)!;
+    let history: ShiftRequest['zohoHistory'] = {
+      state: 'UNKNOWN',
+      reason: 'No confirmed Zoho user/portal context is available.',
+    };
+    try {
+      const account = (await this.actions.accounts.tokens('zoho')).account;
+      const draft = this.store
+        .list<ExternalDraft>('external_drafts')
+        .filter((d) => d.kind === 'TIME_LOG' && d.payload.account === account)
+        .at(-1);
+      if (draft) {
+        const p = draft.payload as TimeLogPayload;
+        const result = await this.actions.zoho.timeLogsRange(
+          p.portalId,
+          localDate(shift.clockIn),
+          localDate(shift.clockOut),
+          p.ownerId,
+        );
+        history = result.items.some((log) => log.minutes === null)
+          ? { state: 'UNKNOWN', reason: 'An existing Zoho duration is unrecognized.' }
+          : {
+              state: 'CHECKED',
+              checkedAt: result.checkedAt,
+              entries: result.items,
+              loggedMinutes: result.items.reduce((n, log) => n + (log.minutes || 0), 0),
+            };
+      }
+    } catch (error) {
+      history = { state: 'UNKNOWN', reason: (error as Error).message };
+    }
+    return this.enqueue(shift, retry, history);
+  }
+  enqueue(shift: AttendanceShift, retry = false, history?: ShiftRequest['zohoHistory']) {
     const settings = shiftSettings(this.store);
     if (!settings.enabled || !settings.shareWithAI)
       throw new Error('Enable shift planning and explicit AI sharing first.');
@@ -134,6 +179,7 @@ export class ShiftService {
       .filter(
         (m) =>
           m.provider === 'teams' &&
+          messageRelevance(this.store, m).relevant &&
           ((m.observedAt >= shift.clockIn && m.observedAt <= shift.clockOut + 3600000) ||
             (m.sentAt &&
               /\d{4}-\d{2}-\d{2}T/.test(m.sentAt) &&
@@ -162,6 +208,11 @@ export class ShiftService {
       shift,
       settings,
       capacityMinutes: capacity(shift, settings),
+      zohoHistory: history,
+      allocatableMinutes:
+        history?.state === 'CHECKED'
+          ? Math.max(0, capacity(shift, settings) - (history.loggedMinutes || 0))
+          : capacity(shift, settings),
       evidence,
       mappings: this.store.list<ZohoMapping>('work_mappings'),
       projects: this.store.list<KnowledgeProject>('knowledge_projects'),
@@ -274,6 +325,34 @@ export class ShiftService {
         );
     }
     plan.rows = input.rows;
+    // Recheck manual provider additions made after the AI proposed this allocation.
+    if (this.actions.zoho) {
+      const portals = [
+        ...new Set(
+          input.rows.map(
+            (row) => this.store.get<ZohoMapping>('work_mappings', row.mappingId!)!.portalId!,
+          ),
+        ),
+      ];
+      if (portals.length !== 1)
+        throw new Error('Prepare allocations for one Zoho portal at a time.');
+      const current = await this.actions.zoho.timeLogsRange(
+        portals[0],
+        localDate(request.shift.clockIn),
+        localDate(request.shift.clockOut),
+        input.ownerId,
+      );
+      if (current.items.some((log) => log.minutes === null))
+        throw new Error('Existing Zoho durations need review before preparing drafts.');
+      const recorded = current.items.reduce((n, log) => n + (log.minutes || 0), 0);
+      if (
+        recorded + input.rows.reduce((n, row) => n + row.durationMinutes, 0) >
+        request.capacityMinutes
+      )
+        throw new Error(
+          'Zoho already contains time for this shift. Check dates and request an updated allocation before preparing more drafts.',
+        );
+    }
     plan.status = 'PREPARING';
     plan.version++;
     this.store.put('shift_plans', id, plan);

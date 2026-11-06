@@ -6,8 +6,11 @@ import { Accounts } from './accounts';
 import { MailService } from './mail';
 import { ZohoService } from './zoho';
 import { ActionService } from './actions';
+import { TimedTimeApprovals, timeApprovalPolicy } from './timed-approval';
 import { notifications } from '../team/notifications';
 import { enqueueChat } from '../team/chat';
+import { auditTimeLogs } from './audit';
+import { focusContext, saveWorkFocus, projectNumbers, workFocus, messageRelevance } from './focus';
 import type { JobQueue } from '../agents/queue';
 const providerSchema = z.enum(['outlook', 'zoho']);
 export function registerConnected(
@@ -21,7 +24,42 @@ export function registerConnected(
   const mail = new MailService(store, accounts, changed),
     zoho = new ZohoService(store, accounts),
     actions = new ActionService(store, accounts, zoho, changed);
+  const timeApprovals = new TimedTimeApprovals(store, actions, changed, autoSync);
   const work = new Set<Promise<unknown>>();
+  app.get('/api/timelogs/approval-policy', async () => timeApprovalPolicy(store));
+  app.put('/api/timelogs/approval-policy', async (request) =>
+    timeApprovals.configure(request.body),
+  );
+  app.post<{ Params: { id: string } }>('/api/external-drafts/:id/timer', async (request) =>
+    timeApprovals.control(request.params.id, request.body),
+  );
+  app.get('/api/work-focus', async () => focusContext(store));
+  app.put('/api/work-focus', async (request) => {
+    const result = saveWorkFocus(store, request.body);
+    changed();
+    return result;
+  });
+  app.post('/api/work-focus/sync', async (request) => {
+    const { portalId } = z
+      .object({ portalId: z.string().regex(/^\d+$/) })
+      .strict()
+      .parse(request.body);
+    const result = await zoho.list('projects', portalId);
+    const catalog = {
+      account: result.account,
+      portalId,
+      complete: true as const,
+      checkedAt: result.fetchedAt,
+      projects: result.items
+        .filter((p) => projectNumbers(p.name).length > 0)
+        .map((p) => ({ ...p, numbers: projectNumbers(p.name) })),
+    };
+    store.put('focus_catalogs', portalId, catalog);
+    const old = workFocus(store);
+    store.put('settings', 'work_focus', { ...old, portalId, version: old.version + 1 });
+    changed();
+    return focusContext(store);
+  });
   app.get('/api/accounts', async () => ({
     accounts: await Promise.all((['outlook', 'zoho'] as const).map((p) => accounts.view(p))),
   }));
@@ -123,6 +161,13 @@ export function registerConnected(
     const item = await mail.item(request.params.id);
     if (item.version !== input.version)
       throw new Error('Email changed. Review it again before sharing with AI.');
+    if (
+      !messageRelevance(store, { provider: 'outlook', scope: item.subject, text: item.body })
+        .relevant
+    )
+      throw new Error(
+        'This email does not match your verified selected Zoho projects. Update My projects or choose a relevant message.',
+      );
     if (!store.get('employees', 'olivia'))
       throw new Error('Restore your analyst before requesting email review.');
     const instruction =
@@ -175,6 +220,41 @@ export function registerConnected(
       .parse(request.query);
     return zoho.timeLogs(input.portalId, input.date, input.ownerId);
   });
+  app.post('/api/zoho/audit', async (request) => {
+    const input = z
+      .object({
+        portalId: z.string().regex(/^\d+$/),
+        ownerId: z.string().regex(/^\d+$/),
+        startDate: z.string(),
+        endDate: z.string(),
+      })
+      .strict()
+      .parse(request.body);
+    return auditTimeLogs(
+      store,
+      zoho,
+      input.portalId,
+      input.ownerId,
+      input.startDate,
+      input.endDate,
+    );
+  });
+  app.get('/api/zoho/work-context', async () => {
+    const account = (await accounts.tokens('zoho')).account;
+    const draft = store
+      .list<ExternalDraft>('external_drafts')
+      .filter((d) => d.kind === 'TIME_LOG' && d.payload.account === account)
+      .at(-1);
+    if (!draft) return {};
+    const p = draft.payload as TimeLogPayload;
+    return {
+      portalId: p.portalId,
+      projectId: p.projectId,
+      ownerId: p.ownerId,
+      ownerName: p.ownerName,
+      lastAudit: store.get('time_audits', account + ':' + p.portalId + ':' + p.ownerId),
+    };
+  });
   app.get('/api/external-drafts', async () =>
     store.list<ExternalDraft>('external_drafts').toReversed(),
   );
@@ -197,6 +277,9 @@ export function registerConnected(
     }
     return actions.time(input.payload as TimeLogPayload, old);
   });
+  app.post<{ Params: { id: string } }>('/api/external-drafts/:id/check', async (request) =>
+    actions.check(request.params.id),
+  );
   app.post<{ Params: { id: string } }>('/api/external-drafts/:id/approve', async (request) => {
     const pending = actions.approve(request.params.id, request.body);
     work.add(pending);
@@ -262,6 +345,7 @@ export function registerConnected(
   const timer = autoSync ? setInterval(() => void sync().catch(() => undefined), 300000) : null;
   const shutdown = async () => {
     if (timer) clearInterval(timer);
+    await timeApprovals.shutdown();
     await mail.close();
     await Promise.allSettled([...work]);
   };

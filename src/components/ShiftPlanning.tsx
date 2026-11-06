@@ -226,6 +226,12 @@ function PlanEditor({
         <Status state={plan.status} />
       </div>
       <p>{plan.summary}</p>
+      {plan.alreadyLoggedMinutes !== undefined && (
+        <p className="microcopy">
+          Already in Zoho when reviewed: {plan.alreadyLoggedMinutes} minutes. Work target:{' '}
+          {plan.workTargetMinutes} minutes. Proposed time below covers only the remaining budget.
+        </p>
+      )}
       <p className="microcopy">{plan.coverage}</p>
       <p>
         <strong>

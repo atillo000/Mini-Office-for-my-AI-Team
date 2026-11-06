@@ -19,6 +19,14 @@ const fixturePut = (kind, id, data) =>
     .prepare('INSERT INTO records(kind,id,data) VALUES(?,?,?)')
     .run(kind, id, JSON.stringify(data));
 const fixtureText = 'QA-only message: please review the proposal today.';
+fixturePut('settings', 'work_focus', {
+  enabled: false,
+  mode: 'SELECTED',
+  selectedNumbers: [],
+  selfNames: [],
+  portalId: '',
+  version: 1,
+});
 fixturePut('captured_messages', 'qa-teams-message', {
   id: 'qa-teams-message',
   provider: 'teams',
@@ -66,6 +74,51 @@ fixturePut('local_reply_drafts', 'qa-local-draft', {
   version: 1,
   createdAt: runId,
   updatedAt: runId,
+});
+fixturePut('settings', 'time_approval', {
+  enabled: true,
+  version: 2,
+  delayMinutes: 30,
+  account: 'qa-offline-account',
+  portalId: '100',
+  ownerId: '400',
+  ownerName: 'QA Worker',
+  updatedAt: runId,
+});
+fixturePut('external_drafts', 'qa-time-draft', {
+  id: 'qa-time-draft',
+  kind: 'TIME_LOG',
+  state: 'DRAFT',
+  version: 1,
+  scopeHash: 'a'.repeat(64),
+  createdAt: runId,
+  updatedAt: runId,
+  payload: {
+    account: 'qa-offline-account',
+    portalId: '100',
+    projectId: '200',
+    projectName: '20260109 QA project',
+    category: 'PROJECT',
+    projectNumber: '20260109',
+    proposalStage: false,
+    module: 'task',
+    taskId: '300',
+    taskName: 'QA research',
+    ownerId: '400',
+    ownerName: 'QA Worker',
+    date: '2026-11-03',
+    durationMinutes: 90,
+    billing: 'Non Billable',
+    description: 'QA-only confirmed work',
+    workConfirmed: true,
+  },
+  autoApproval: {
+    status: 'SCHEDULED',
+    dueAt: runId + 1800000,
+    version: 1,
+    scopeHash: 'a'.repeat(64),
+    policyVersion: 2,
+  },
 });
 fixtureDb.close();
 const projectPath = path.resolve('test-results', `project-${runId}`);
@@ -198,6 +251,7 @@ try {
   await page.getByRole('button', { name: 'Profile', exact: true }).click();
   await page.getByText('Analytical, patient, quietly witty').waitFor();
   checks.push('Employee profile and availability from actual job records');
+  await page.locator('.more-tools summary').click();
   await page.getByRole('button', { name: 'Projects', exact: true }).click();
   await page.getByRole('button', { name: 'Connect a project', exact: true }).click();
   await page.getByLabel('Project name', { exact: true }).fill('Browser QA project');
@@ -286,6 +340,7 @@ try {
   checks.push(
     'Video project setup, persistent confirmed profile, gated generation, remembered feedback, exact idea approval and approval invalidation after edits',
   );
+  await page.locator('.more-tools summary').click();
   await page.getByRole('button', { name: 'Work knowledge', exact: true }).click();
   const workPanel = page.locator('.management-panel .work-center');
   await workPanel.getByRole('heading', { name: 'Work knowledge', exact: true }).waitFor();
@@ -348,10 +403,30 @@ try {
     'Persistent project knowledge, confirmed meeting time, explicit correction and separate rule approval',
   );
   await page.screenshot({ path: 'test-results/office-work-knowledge.png', fullPage: true });
-  await page.getByRole('button', { name: 'Connected applications', exact: true }).click();
-  await page.getByRole('heading', { name: 'Connected accounts', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Connections', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Account setup' })
+    .getByRole('button', { name: 'Outlook', exact: true })
+    .click();
+  await page.getByRole('heading', { name: 'Connections', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Automatic Outlook reader', exact: true }).waitFor();
+  await page.getByText('Manual reader controls', { exact: true }).click();
   await page.getByRole('heading', { name: 'Outlook browser reader', exact: true }).waitFor();
+  await page
+    .getByRole('navigation', { name: 'Account setup' })
+    .getByRole('button', { name: 'Teams', exact: true })
+    .click();
+  await page.getByRole('heading', { name: 'Automatic Teams reader', exact: true }).waitFor();
+  const manualTeams = page
+    .locator('details')
+    .filter({ has: page.getByText('Manual reader controls', { exact: true }) });
+  if ((await manualTeams.getAttribute('open')) === null)
+    await manualTeams.locator('summary').click();
   await page.getByRole('heading', { name: 'Teams browser reader', exact: true }).waitFor();
+  await page
+    .getByRole('navigation', { name: 'Account setup' })
+    .getByRole('button', { name: 'Outlook', exact: true })
+    .click();
   await page.getByText('Optional Outlook read-only Graph setup', { exact: true }).click();
   const microsoft = page.locator('.account-setup').filter({ hasText: 'Microsoft Outlook' });
   const zoho = page.locator('.account-setup').filter({ hasText: 'Zoho Projects' });
@@ -359,6 +434,10 @@ try {
   await microsoft.getByRole('button', { name: 'Save connection settings', exact: true }).click();
   await microsoft.getByRole('button', { name: 'Sign in to Microsoft', exact: true }).waitFor();
   assert((await microsoft.innerText()).includes('Not connected'));
+  await page
+    .getByRole('navigation', { name: 'Account setup' })
+    .getByRole('button', { name: 'Zoho', exact: true })
+    .click();
   await zoho.getByLabel('Application client ID', { exact: true }).fill('browser-qa-zoho');
   await zoho
     .getByLabel('Zoho client secret', { exact: true })
@@ -369,7 +448,26 @@ try {
   checks.push('Guided Microsoft/Zoho setup stores config without claiming connected accounts');
   await page.getByRole('button', { name: 'Inbox', exact: true }).click();
   await page.locator('.panel-tabs').getByRole('button', { name: 'Teams', exact: true }).click();
+  await page.getByRole('heading', { name: 'Automatic Teams reader', exact: true }).waitFor();
+  await page.getByText('Manual reader controls', { exact: true }).click();
   await page.getByRole('heading', { name: 'Teams browser reader', exact: true }).waitFor();
+  await page
+    .getByRole('navigation', { name: 'Inbox contents' })
+    .getByRole('button', { name: 'Messages', exact: true })
+    .click();
+  await page.getByRole('searchbox', { name: 'Search captured inbox' }).fill('proposal');
+  await page
+    .getByText('QA-only message: please review the proposal today.', { exact: true })
+    .waitFor();
+  await page
+    .getByRole('searchbox', { name: 'Search captured inbox' })
+    .fill('no-matching-qa-message');
+  await page.getByText('No messages match your search and work filter.', { exact: true }).waitFor();
+  await page.getByRole('searchbox', { name: 'Search captured inbox' }).fill('');
+  await page
+    .getByRole('navigation', { name: 'Inbox contents' })
+    .getByRole('button', { name: 'Draft replies', exact: true })
+    .click();
   const localDraft = page.getByRole('article', { name: 'Local reply draft' });
   await localDraft.getByRole('button', { name: 'Mark reviewed', exact: true }).click();
   await localDraft.locator('.status').filter({ hasText: 'reviewed' }).waitFor();
@@ -385,6 +483,49 @@ try {
   );
   await page.getByRole('button', { name: 'Time logs', exact: true }).click();
   await page.getByRole('heading', { name: 'Time logs', exact: true }).waitFor();
+  await page
+    .getByRole('heading', { name: 'Check logged and missing dates', exact: true })
+    .waitFor();
+  await page
+    .getByRole('navigation', { name: 'Time log workflow' })
+    .getByRole('button', { name: 'Drafts', exact: true })
+    .click();
+  await page.getByRole('searchbox', { name: 'Search time logs' }).fill('QA confirmed');
+  const timeDraft = page.getByRole('article', { name: 'Review external action' });
+  await timeDraft.getByText(/Submits automatically in/).waitFor();
+  await timeDraft.getByRole('button', { name: 'Pause automatic submission', exact: true }).click();
+  await timeDraft.getByText('Automatic submission paused', { exact: true }).waitFor();
+  await timeDraft.getByRole('button', { name: 'Restart 30-minute timer', exact: true }).click();
+  await timeDraft.getByText(/Submits automatically in/).waitFor();
+  const automatic = page.locator('.time-approval-settings');
+  await automatic.locator('summary').click();
+  await automatic
+    .getByLabel('Submit confirmed time-log drafts automatically after 30 minutes', { exact: true })
+    .click();
+  await timeDraft.getByText('Automatic submission is off', { exact: true }).waitFor();
+  assert.equal(
+    await automatic
+      .getByLabel('Submit confirmed time-log drafts automatically after 30 minutes', {
+        exact: true,
+      })
+      .isChecked(),
+    false,
+  );
+  assert.equal(
+    (
+      await (
+        await page.request.get('http://127.0.0.1:' + clientPort + '/api/external-drafts')
+      ).json()
+    ).find((d) => d.id === 'qa-time-draft').state,
+    'DRAFT',
+  );
+  checks.push(
+    'Searchable grouped inbox and time logs; persistent countdown, individual pause/restart and global stop without provider writes in offline QA',
+  );
+  await page
+    .getByRole('navigation', { name: 'Time log workflow' })
+    .getByRole('button', { name: 'After shift', exact: true })
+    .click();
   await page.getByRole('heading', { name: 'After-shift planning', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Shift settings', exact: true }).click();
   assert.equal(await page.getByLabel('Unpaid break (minutes)', { exact: true }).inputValue(), '60');
@@ -400,12 +541,37 @@ try {
   checks.push(
     'Shift target and unpaid lunch configuration persist without inventing a Sprout connection or sharing consent',
   );
+  await page
+    .getByRole('navigation', { name: 'Time log workflow' })
+    .getByRole('button', { name: 'Manual entry', exact: true })
+    .click();
   await page.getByLabel('Work category', { exact: true }).selectOption('BUSINESS_DEVELOPMENT');
   assert(await page.getByRole('button', { name: 'Save time log for approval' }).isDisabled());
   await page.getByRole('button', { name: /^Notifications/ }).click();
+  await page.getByRole('searchbox', { name: 'Search notifications' }).fill('proposal today');
+  const sourceNotice = page.locator('.action-items article').filter({ hasText: fixtureText });
+  await sourceNotice.locator('.action-open').click();
+  await page.locator('.mail-body').filter({ hasText: fixtureText }).waitFor();
+  assert.equal(
+    await page
+      .getByRole('navigation', { name: 'Inbox contents' })
+      .getByRole('button', { name: 'Messages', exact: true })
+      .getAttribute('class'),
+    'active',
+  );
+  await page.getByRole('button', { name: /^Notifications/ }).click();
+  await page.getByRole('searchbox', { name: 'Search notifications' }).fill('greeting function');
   const approval = page
     .locator('.action-items article')
     .filter({ hasText: 'Create a small, tested greeting function.' });
+  await approval.waitFor();
+  const approvalsGroup = page
+    .locator('.inbox-group')
+    .filter({ hasText: 'Create a small, tested greeting function.' });
+  await approvalsGroup.locator(':scope > summary').click();
+  assert.equal(await approval.isVisible(), false);
+  await approvalsGroup.locator(':scope > summary').click();
+  await page.screenshot({ path: 'test-results/office-notifications.png', fullPage: true });
   await approval.locator('.action-open').click();
   await page.getByRole('button', { name: 'Approve planning', exact: true }).waitFor();
   assert(await page.getByRole('button', { name: 'Approve planning', exact: true }).isDisabled());

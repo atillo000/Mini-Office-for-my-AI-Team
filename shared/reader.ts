@@ -23,6 +23,7 @@ export interface ReaderState {
   scope: string;
   lastReadAt?: number;
   lastError?: string;
+  lastNotice?: string;
 }
 export interface CapturedMessage extends RenderedMessage {
   id: string;
@@ -46,9 +47,32 @@ export interface ReaderSnapshot {
   coverage: string;
 }
 export interface CommunicationRequest {
+  automation?: { provider: ReaderProvider; version: number };
+  focus?: { numbers: string[]; selfNames: string[]; notice: string };
   snapshot: ReaderSnapshot;
   messages: CapturedMessage[];
   consentHash: string;
+}
+export interface ReaderAutomationSettings {
+  provider: ReaderProvider;
+  enabled: boolean;
+  shareWithAI: boolean;
+  intervalMinutes: number;
+  version: number;
+}
+export interface ReaderAutomationState {
+  provider: ReaderProvider;
+  status: 'OFF' | 'STARTING' | 'READING' | 'MONITORING' | 'NEEDS_SIGN_IN' | 'NEEDS_ATTENTION';
+  visitedViews: number;
+  capturedMessages: number;
+  lastRunAt?: number;
+  nextRunAt?: number;
+  error?: string;
+  coverage?: string;
+}
+export interface ReaderTarget {
+  id: string;
+  label: string;
 }
 export interface MessageAssessment {
   messageId: string;

@@ -2,7 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Search, Hash } from 'lucide-react';
 import { useOffice } from '../store';
 import { Empty, ErrorText, useAction, post, dateTime } from './common';
+import { InboxGroup } from './InboxGroup';
+import { matchesSearch } from './inbox-groups';
 export function Chat({ channel }: { channel: string }) {
+  const [today] = useState(() =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(Date.now()),
+  );
   const [text, setText] = useState('');
   const [query, setQuery] = useState('');
   const action = useAction();
@@ -13,8 +18,17 @@ export function Chat({ channel }: { channel: string }) {
     (m) =>
       m.mode !== 'simulation' &&
       m.channel === channel &&
-      m.text.toLowerCase().includes(query.toLowerCase()),
+      matchesSearch(
+        query,
+        m.text,
+        employees.find((e) => e.id === m.sender)?.name,
+        m.sender === 'ceo' ? 'You' : m.sender,
+        dateTime(m.at),
+      ),
   );
+  const dateKey = (at: number) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(at);
+  const days = [...new Set(filtered.map((m) => dateKey(m.at)))];
   useEffect(() => {
     post('/messages/read', { channel }).catch(() => {});
   }, [channel, messages.length]);
@@ -38,21 +52,37 @@ export function Chat({ channel }: { channel: string }) {
             Send a message to your AI teammate. Real responses appear here when the runner finishes.
           </Empty>
         )}
-        {filtered.map((m) => (
-          <article className={`chat-message ${m.sender === 'ceo' ? 'mine' : ''}`} key={m.id}>
-            <div className="message-meta">
-              <strong>
-                {m.sender === 'ceo'
-                  ? 'You'
-                  : employees.find((e) => e.id === m.sender)?.name || m.sender}
-              </strong>
-              <span>
-                {m.mode === 'simulation' ? 'Simulated' : m.mode === 'execution' ? 'AI team' : 'CEO'}
-              </span>
-            </div>
-            <p>{m.text}</p>
-            <time>{dateTime(m.at)}</time>
-          </article>
+        {days.map((day) => (
+          <InboxGroup
+            key={day}
+            title={day === today ? 'Today' : day}
+            count={filtered.filter((m) => dateKey(m.at) === day).length}
+            initiallyOpen={day === days.at(-1)}
+            forceOpen={!!query.trim()}
+          >
+            {filtered
+              .filter((m) => dateKey(m.at) === day)
+              .map((m) => (
+                <article className={`chat-message ${m.sender === 'ceo' ? 'mine' : ''}`} key={m.id}>
+                  <div className="message-meta">
+                    <strong>
+                      {m.sender === 'ceo'
+                        ? 'You'
+                        : employees.find((e) => e.id === m.sender)?.name || m.sender}
+                    </strong>
+                    <span>
+                      {m.mode === 'simulation'
+                        ? 'Simulated'
+                        : m.mode === 'execution'
+                          ? 'AI team'
+                          : 'CEO'}
+                    </span>
+                  </div>
+                  <p>{m.text}</p>
+                  <time>{dateTime(m.at)}</time>
+                </article>
+              ))}
+          </InboxGroup>
         ))}
         <div ref={end} />
       </div>

@@ -37,14 +37,18 @@ import { NotificationBell } from './components/ActionInbox';
 const Office = lazy(() => import('./world/Office'));
 const nav: { id: Panel; icon: typeof Users; label: string }[] = [
   { id: 'start', icon: Compass, label: 'Start here' },
-  { id: 'team', icon: Users, label: 'People' },
-  { id: 'projects', icon: FolderKanban, label: 'Projects' },
+  { id: 'focus', icon: BriefcaseBusiness, label: 'My projects' },
   { id: 'inbox', icon: Mail, label: 'Inbox' },
   { id: 'timelogs', icon: Clock3, label: 'Time logs' },
+  { id: 'connections', icon: Plug, label: 'Connections' },
+];
+const tools: { id: Panel; icon: typeof Users; label: string }[] = [
+  { id: 'settings', icon: Settings2, label: 'Settings' },
+  { id: 'team', icon: Users, label: 'People' },
+  { id: 'projects', icon: FolderKanban, label: 'Projects' },
   { id: 'meetings', icon: CalendarDays, label: 'Meetings' },
   { id: 'activity', icon: Activity, label: 'Activity' },
   { id: 'work', icon: BriefcaseBusiness, label: 'Work knowledge' },
-  { id: 'connections', icon: Plug, label: 'Connected applications' },
 ];
 export function Portrait({ id, small = false }: { id: string; small?: boolean }) {
   const e = useOffice((s) => s.employees.find((e) => e.id === id));
@@ -145,6 +149,7 @@ export default function App() {
             onClick={() => s.open(null)}
           >
             <Building2 size={21} />
+            <span className="nav-label">Office</span>
           </button>
           {nav.map((n) => (
             <button
@@ -155,19 +160,29 @@ export default function App() {
               onClick={() => s.open(s.panel === n.id ? null : n.id)}
             >
               <n.icon size={21} />
+              <span className="nav-label">{n.label}</span>
               {n.id === 'inbox' && unread > 0 && <i className="nav-dot" />}
             </button>
           ))}
+          <NotificationBell navigation />
+          <details className="more-tools">
+            <summary>More tools</summary>
+            <div>
+              {tools.map((n) => (
+                <button
+                  key={n.id}
+                  className={`nav-button ${s.panel === n.id ? 'active' : ''}`}
+                  aria-label={n.label}
+                  onClick={() => s.open(n.id)}
+                >
+                  <n.icon size={20} />
+                  <span>{n.label}</span>
+                </button>
+              ))}
+            </div>
+          </details>
         </div>
         <div className="nav-bottom">
-          <button
-            className="nav-button"
-            aria-label="Settings"
-            title="Settings"
-            onClick={() => s.open('settings')}
-          >
-            <Settings2 size={21} />
-          </button>
           <button
             className="ceo-avatar"
             aria-label="CEO briefing"
@@ -195,8 +210,6 @@ export default function App() {
             </span>
           </div>
           <div className="top-actions">
-            <NotificationBell />
-            <span className="top-divider" />
             <div className="ceo-info">
               <span className="ceo-badge">C</span>
               <div>

@@ -36,6 +36,14 @@ const token = (account: string): Tokens => ({
 async function fixture(handler: (url: URL, init?: RequestInit) => Promise<Response> | Response) {
   const store = new Store(':memory:');
   stores.push(store);
+  store.put('settings', 'work_focus', {
+    enabled: false,
+    mode: 'SELECTED',
+    selectedNumbers: [],
+    selfNames: [],
+    portalId: '',
+    version: 1,
+  });
   const secrets = new MemorySecrets();
   await secrets.set('outlook:tokens', token('outlook-fixture'));
   await secrets.set('zoho:tokens', token('zoho-fixture'));

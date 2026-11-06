@@ -113,6 +113,14 @@ function fixture(enabled = false) {
     model = new FixtureModel(),
     queue = new JobQueue(store, () => {}, model, enabled),
     driver = new FixtureReader();
+  store.put('settings', 'work_focus', {
+    enabled: false,
+    mode: 'SELECTED',
+    selectedNumbers: [],
+    selfNames: [],
+    portalId: '',
+    version: 1,
+  });
   const readers = new ReaderService(store, driver, queue, () => {});
   cleanups.push(async () => {
     await readers.shutdown();
@@ -130,6 +138,21 @@ async function terminal(store: Store, id: string) {
   throw new Error('Fixture review did not finish');
 }
 describe('Read-only browser boundaries', () => {
+  it('coalesces identical preview rows shown in both top and all search results', async () => {
+    const { readers, driver, store } = fixture();
+    driver.source = 'https://outlook.office.com/mail/';
+    const preview = {
+      sourceId: '',
+      text: 'A rendered project preview.',
+      author: '',
+      sentAt: '',
+      preview: true,
+    };
+    driver.messages = [preview, preview];
+    const result = await readers.capture('outlook', 'LIST', false);
+    expect(result.snapshot.messageIds).toHaveLength(1);
+    expect(store.list('captured_messages')).toHaveLength(1);
+  });
   it('accepts only exact provider HTTPS hosts, including the current cloud.microsoft domains', () => {
     expect(allowedReaderUrl('outlook', 'https://outlook.cloud.microsoft/mail/')).toBe(true);
     expect(allowedReaderUrl('teams', 'https://teams.cloud.microsoft/v2/')).toBe(true);
@@ -320,6 +343,25 @@ describe('DOM extraction in a real browser with explicit QA content', () => {
   });
   afterAll(async () => {
     await browser?.close();
+  });
+  it('does not mistake changing Outlook row IDs or unread counters for a different source', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent(
+        '<div role="treeitem" aria-selected="true">Inbox\nselected\n42\nunread</div><div role="listbox"><div role="option" id="temporary-one">20260109 QA preview</div></div>',
+      );
+      const first = await extractRenderedView(page, 'outlook', 'LIST');
+      await page.locator('[role=option]').evaluate((el) => (el.id = 'temporary-two'));
+      await page
+        .locator('[role=treeitem]')
+        .evaluate((el) => (el.textContent = 'Inbox\nselected\n43\nunread'));
+      const second = await extractRenderedView(page, 'outlook', 'LIST');
+      expect(first).toEqual(second);
+      expect(second.scope).toBe('Inbox');
+      expect(second.messages[0].sourceId).toBe('');
+    } finally {
+      await page.close();
+    }
   });
   it('reads dated Sprout attendance groups and excludes location/IP details and other views', async () => {
     const page = await browser.newPage();

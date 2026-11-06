@@ -5,6 +5,9 @@ import { digest } from '../agents/artifacts';
 import { Accounts, ProviderError } from './accounts';
 import { ZohoService, providerId } from './zoho';
 import { WorkService } from '../work/service';
+import { scheduleTimeApproval, assertTimeApproval, timeApprovalPolicy } from './timed-approval';
+import { capacity, localDate, shiftSettings } from '../shifts/attendance';
+import type { AttendanceShift } from '../../shared/shifts';
 const id = z.string().regex(/^\d+$/);
 const clock = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 export const timeInput = z
@@ -104,6 +107,7 @@ function clock24(value: unknown) {
   return String(hour).padStart(2, '0') + ':' + match[2];
 }
 export class ActionService {
+  private submissions = new Map<string, Promise<ExternalDraft>>();
   constructor(
     public store: Store,
     public accounts: Accounts,
@@ -138,7 +142,11 @@ export class ActionService {
         scopeHash: digest({ kind, payload }),
         createdAt: previous?.createdAt || Date.now(),
         updatedAt: Date.now(),
+        ...(previous?.autoApproval?.status === 'PAUSED' && !previous.autoApproval.resumeOnSave
+          ? { autoApproval: previous.autoApproval }
+          : {}),
       };
+      scheduleTimeApproval(this.store, draft);
       this.store.put('external_drafts', draft.id, draft);
       new WorkService(this.store).audit(
         'EXTERNAL_DRAFT_SAVED',
@@ -189,7 +197,7 @@ export class ActionService {
       previous,
     );
   }
-  private duplicate(draft: ExternalDraft) {
+  private duplicate(draft: ExternalDraft, limit = 1440, automatic = false) {
     let total = draft.kind === 'TIME_LOG' ? (draft.payload as TimeLogPayload).durationMinutes : 0;
     for (const other of this.store.list<ExternalDraft>('external_drafts')) {
       if (
@@ -205,6 +213,10 @@ export class ActionService {
         const a = draft.payload as TimeLogPayload,
           b = other.payload as TimeLogPayload;
         if (a.account !== b.account || a.ownerId !== b.ownerId || a.date !== b.date) continue;
+        if (automatic && ['SUBMITTING', 'UNKNOWN_OUTCOME'].includes(other.state))
+          throw new Error(
+            'Another time log for this day has an unfinished or unknown submission. Verify Zoho before continuing.',
+          );
         total += b.durationMinutes;
         if (
           a.startTime &&
@@ -217,9 +229,27 @@ export class ActionService {
           throw new Error('This time range overlaps a submitted or uncertain local log.');
       }
     }
-    if (total > 1440) throw new Error('Saved time logs exceed the hours available that day.');
+    if (total > limit)
+      throw new Error(
+        limit === 1440
+          ? 'Saved time logs exceed the hours available that day.'
+          : 'Saved time logs exceed the allowed work minutes for that day.',
+      );
   }
-  private async preflight(draft: ExternalDraft) {
+  private dayLimit(draft: ExternalDraft) {
+    const settings = shiftSettings(this.store),
+      p = draft.payload as TimeLogPayload;
+    const shifts = this.store
+      .list<AttendanceShift>('attendance_shifts')
+      .filter((s) => localDate(s.clockIn) === p.date);
+    return shifts.length
+      ? Math.min(
+          settings.targetMinutes,
+          shifts.reduce((n, s) => n + capacity(s, settings), 0),
+        )
+      : settings.targetMinutes;
+  }
+  private async preflight(draft: ExternalDraft, automatic = false) {
     const provider = draft.kind === 'EMAIL_REPLY' ? 'outlook' : 'zoho';
     if ((await this.accounts.tokens(provider)).account !== draft.payload.account)
       throw new Error('Connected account changed. Create a fresh draft.');
@@ -301,6 +331,14 @@ export class ActionService {
       if (history.items.reduce((sum, log) => sum + (log.minutes || 0), p.durationMinutes) > 1440)
         throw new Error('Existing Zoho logs plus this draft exceed 24 hours for the selected day.');
       if (
+        automatic &&
+        history.items.reduce((sum, log) => sum + (log.minutes || 0), p.durationMinutes) >
+          this.dayLimit(draft)
+      )
+        throw new Error(
+          'Existing Zoho time plus this draft exceeds the confirmed daily work target.',
+        );
+      if (
         history.items.some(
           (log) =>
             log.projectId === p.projectId &&
@@ -313,7 +351,39 @@ export class ActionService {
         );
     }
   }
-  async approve(id: string, raw: unknown) {
+  async check(id: string) {
+    const draft = this.store.get<ExternalDraft>('external_drafts', id);
+    if (!draft || draft.kind !== 'TIME_LOG' || draft.state !== 'DRAFT')
+      throw new Error('Choose a current time-log draft for a read-only check.');
+    await this.preflight(draft);
+    const current = this.store.get<ExternalDraft>('external_drafts', id);
+    if (current?.state === 'DRAFT' && current.version === draft.version && current.error) {
+      current.error = undefined;
+      this.store.put('external_drafts', id, current);
+      this.changed();
+    }
+    return { ready: true, checkedAt: Date.now(), submitted: false };
+  }
+  async approve(
+    id: string,
+    raw: unknown,
+    automatic?: { policyVersion: number },
+  ): Promise<ExternalDraft> {
+    const draft = this.store.get<ExternalDraft>('external_drafts', id),
+      p = draft?.payload as TimeLogPayload | undefined;
+    const key = draft?.kind === 'TIME_LOG' ? [p?.account, p?.ownerId, p?.date].join(':') : id;
+    const prior = this.submissions.get(key);
+    const pending = (prior ? prior.catch(() => undefined) : Promise.resolve()).then(() =>
+      this.submit(id, raw, automatic),
+    );
+    this.submissions.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.submissions.get(key) === pending) this.submissions.delete(key);
+    }
+  }
+  private async submit(id: string, raw: unknown, automatic?: { policyVersion: number }) {
     const input = z
       .object({ version: z.number().int(), scopeHash: z.string().length(64) })
       .strict()
@@ -331,7 +401,22 @@ export class ActionService {
       digest({ kind: draft.kind, payload: draft.payload }) !== input.scopeHash
     )
       throw new Error('Draft changed or was already submitted. Review the current draft.');
-    await this.preflight(draft);
+    try {
+      if (automatic) assertTimeApproval(this.store, draft, automatic.policyVersion);
+      await this.preflight(draft, !!automatic);
+    } catch (error) {
+      const current = this.store.get<ExternalDraft>('external_drafts', id);
+      if (current?.state === 'DRAFT' && current.version === input.version) {
+        current.error = 'Submission stopped before sending: ' + (error as Error).message;
+        if (current.autoApproval?.status === 'SCHEDULED') {
+          current.autoApproval.status = 'BLOCKED';
+          current.autoApproval.reason = (error as Error).message;
+        }
+        this.store.put('external_drafts', id, current);
+        this.changed();
+      }
+      throw error;
+    }
     // Recheck after awaited provider reads: repeated clicks cannot send twice.
     draft = this.store.transaction(() => {
       const current = this.store.get<ExternalDraft>('external_drafts', id)!;
@@ -341,18 +426,27 @@ export class ActionService {
         current.scopeHash !== input.scopeHash
       )
         throw new Error('This draft was already changed or submitted.');
-      this.duplicate(current);
+      if (automatic) assertTimeApproval(this.store, current, automatic.policyVersion);
+      this.duplicate(current, automatic ? this.dayLimit(current) : 1440, !!automatic);
       current.state = 'SUBMITTING';
+      current.error = undefined;
       current.approval = {
         at: Date.now(),
         approvedBy: 'ceo',
         version: current.version,
         scopeHash: current.scopeHash,
+        mode: automatic ? 'AUTO_POLICY' : 'MANUAL',
+        ...(automatic
+          ? {
+              policyVersion: automatic.policyVersion,
+              policyHash: digest(timeApprovalPolicy(this.store)),
+            }
+          : {}),
       };
       current.updatedAt = Date.now();
       this.store.put('external_drafts', id, current);
       new WorkService(this.store).audit(
-        'EXACT_EXTERNAL_PAYLOAD_APPROVED',
+        automatic ? 'EXTERNAL_PAYLOAD_APPROVED_BY_TIME_POLICY' : 'EXACT_EXTERNAL_PAYLOAD_APPROVED',
         'external_drafts',
         id,
         current.version,
@@ -417,6 +511,7 @@ export class ActionService {
             'Zoho readback did not match the approved time log. Verify the provider entry before further action.',
           );
         draft.state = 'SUBMITTED';
+        if (draft.autoApproval) draft.autoApproval.status = 'EXECUTED';
         draft.receipt.verifiedAt = Date.now();
       }
     } catch (error) {

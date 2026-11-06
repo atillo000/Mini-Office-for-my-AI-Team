@@ -8,13 +8,18 @@ import type {
   ReaderState,
 } from '../../shared/reader';
 import type { Job } from '../../shared/types';
+import type { MessageRelevance, WorkFocus } from '../../shared/focus';
 import { api } from '../api';
 import { useOffice } from '../store';
 import { useResource } from './useResource';
 import { ErrorText, Status, useAction, post, dateTime } from './common';
+import { AutomaticReader } from './AutomaticReader';
+import { InboxGroup } from './InboxGroup';
+import { matchesSearch } from './inbox-groups';
 interface ReaderData {
   state: ReaderState;
-  messages: CapturedMessage[];
+  messages: (CapturedMessage & { relevance: MessageRelevance })[];
+  focus: { settings: WorkFocus; notice: string; numbers: string[] };
   snapshots: ReaderSnapshot[];
   reports: CommunicationReport[];
   drafts: LocalReplyDraft[];
@@ -133,6 +138,7 @@ export function BrowserControls({
         </p>
       )}
       <ErrorText error={action.error || error || state?.lastError || ''} />
+      {state?.lastNotice && <p className="microcopy">{state.lastNotice}</p>}
       <p className="microcopy">
         Reads rendered text only. It does not read every chat or unloaded history, enter
         credentials, create provider drafts, or send anything. Watching stops if the page reloads or
@@ -145,6 +151,9 @@ export function BrowserInbox({ provider }: { provider: ReaderProvider }) {
   const resource = useResource<ReaderData>('/readers/' + provider + '/messages');
   const [selected, setSelected] = useState<string | null>(null),
     [manual, setManual] = useState('');
+  const [view, setView] = useState<string | null>(null),
+    [workOnly, setWorkOnly] = useState(true);
+  const [query, setQuery] = useState('');
   const target = useOffice((s) => s.targetId),
     action = useAction();
   const refresh = resource.refresh;
@@ -160,9 +169,82 @@ export function BrowserInbox({ provider }: { provider: ReaderProvider }) {
   const reports = focusedReport
     ? [focusedReport, ...(data?.reports.filter((r) => r.id !== focusedReport.id) || [])]
     : data?.reports || [];
+  const activeView =
+    view ||
+    (targetDraft
+      ? 'drafts'
+      : focusedReport
+        ? 'reports'
+        : message?.id === target
+          ? 'messages'
+          : reports.length
+            ? 'reports'
+            : 'messages');
+  const conversation = (m: ReaderData['messages'][number]) =>
+    provider === 'outlook' && m.relevance.numbers.length
+      ? 'Project ' + m.relevance.numbers.join(', ')
+      : m.scope;
+  const visibleMessages = (data?.messages || []).filter(
+    (m) =>
+      (!workOnly || m.relevance.relevant || m.id === chosen) &&
+      matchesSearch(query, m.scope, m.text, m.author, m.sentAt, dateTime(m.observedAt)),
+  );
+  const relevantIds = new Set(
+    (data?.messages || []).filter((m) => m.relevance.relevant).map((m) => m.id),
+  );
+  const visibleReports = reports.filter(
+    (r) =>
+      (!workOnly ||
+        r.id === focusedReport?.id ||
+        r.assessments.every((a) => relevantIds.has(a.messageId))) &&
+      matchesSearch(
+        query,
+        r.scope,
+        r.summary,
+        ...r.assessments.flatMap((a) => [a.reason, a.sourceText, a.urgency]),
+      ),
+  );
   return (
     <div className="browser-inbox">
-      <BrowserControls provider={provider} after={refresh} />
+      <AutomaticReader provider={provider} />
+      <p className="microcopy">
+        {data?.focus.notice}{' '}
+        <button className="text-button" onClick={() => useOffice.getState().open('focus')}>
+          My project focus
+        </button>
+      </p>
+      <details className="reader-setup">
+        <summary>Manual reader controls</summary>
+        <BrowserControls provider={provider} after={refresh} />
+      </details>
+      <nav className="panel-tabs" aria-label="Inbox contents">
+        {[
+          ['reports', 'Reports'],
+          ['messages', 'Messages'],
+          ['drafts', 'Draft replies'],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            className={activeView === id ? 'active' : ''}
+            onClick={() => setView(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      <label className="search-box">
+        <input
+          type="search"
+          aria-label="Search captured inbox"
+          placeholder="Search messages, reports and reply drafts"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </label>
+      <label className="checkbox-label">
+        <input type="checkbox" checked={workOnly} onChange={(e) => setWorkOnly(e.target.checked)} />
+        Show only my work. Uncheck to view earlier captured history.
+      </label>
       <ErrorText error={resource.error || action.error} />
       {data?.jobs[0] && (
         <div className="chat-job">
@@ -183,99 +265,158 @@ export function BrowserInbox({ provider }: { provider: ReaderProvider }) {
         </div>
       )}
       {data?.snapshots[0] && <p className="studio-boundary">{data.snapshots[0].coverage}</p>}
-      <h3>Captured messages</h3>
-      {!data?.messages.length && (
-        <p>No real messages captured yet. Sign in and select a view in the reader window.</p>
+      {activeView === 'messages' && (
+        <>
+          <h3>Captured messages</h3>
+          {!data?.messages.length && (
+            <p>No real messages captured yet. Sign in and select a view in the reader window.</p>
+          )}
+          <div className="studio-ideas">
+            {[...new Set(visibleMessages.map(conversation))].map((scope) => (
+              <InboxGroup
+                key={scope}
+                title={scope}
+                count={visibleMessages.filter((m) => conversation(m) === scope).length}
+                initiallyOpen={visibleMessages.length < 5}
+                forceOpen={!!query.trim() || (!!message && conversation(message) === scope)}
+              >
+                {visibleMessages
+                  .filter((m) => conversation(m) === scope)
+                  .map((m) => (
+                    <button
+                      key={m.id}
+                      className={message?.id === m.id ? 'selected' : ''}
+                      onClick={() => {
+                        setSelected(m.id);
+                        setManual('');
+                      }}
+                    >
+                      <div>
+                        <strong>
+                          {m.author || (m.preview ? 'Email preview' : 'Chat message')}
+                        </strong>
+                        <small>
+                          {m.author || 'Author not shown'} ·{' '}
+                          {m.preview ? 'Preview' : 'Rendered message'} · observed{' '}
+                          {dateTime(m.observedAt)}
+                        </small>
+                        <p>{m.text.slice(0, 180)}</p>
+                      </div>
+                    </button>
+                  ))}
+              </InboxGroup>
+            ))}
+          </div>
+          {!visibleMessages.length && !!data?.messages.length && (
+            <p>No messages match your search and work filter.</p>
+          )}
+          {message && (
+            <article>
+              <h3>{message.scope}</h3>
+              <pre className="mail-body">{message.text}</pre>
+              <p className="microcopy">
+                {message.sentAt
+                  ? 'Provider time: ' + message.sentAt
+                  : 'Sent time was not shown; observation time is not a sent timestamp.'}
+              </p>
+              <form
+                className="stacked-form"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const result = await action.execute(
+                    () => post('/captured-messages/' + message.id + '/draft', { body: manual }),
+                    'Local draft saved. Nothing was sent.',
+                  );
+                  if (result) {
+                    setManual('');
+                    await refresh();
+                  }
+                }}
+              >
+                <label>
+                  Your own draft
+                  <textarea
+                    aria-label="Your own draft"
+                    required
+                    rows={4}
+                    maxLength={6000}
+                    value={manual}
+                    onChange={(e) => setManual(e.target.value)}
+                  />
+                </label>
+                <button className="button secondary" disabled={action.busy}>
+                  Save local draft
+                </button>
+              </form>
+            </article>
+          )}
+        </>
       )}
-      <div className="studio-ideas">
-        {data?.messages.map((m) => (
-          <button
-            key={m.id}
-            className={message?.id === m.id ? 'selected' : ''}
-            onClick={() => {
-              setSelected(m.id);
-              setManual('');
-            }}
-          >
-            <div>
-              <strong>{m.scope}</strong>
-              <small>
-                {m.author || 'Author not shown'} · {m.preview ? 'Preview' : 'Rendered message'} ·
-                observed {dateTime(m.observedAt)}
-              </small>
-              <p>{m.text.slice(0, 180)}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-      {message && (
-        <article>
-          <h3>{message.scope}</h3>
-          <pre className="mail-body">{message.text}</pre>
-          <p className="microcopy">
-            {message.sentAt
-              ? 'Provider time: ' + message.sentAt
-              : 'Sent time was not shown; observation time is not a sent timestamp.'}
-          </p>
-          <form
-            className="stacked-form"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const result = await action.execute(
-                () => post('/captured-messages/' + message.id + '/draft', { body: manual }),
-                'Local draft saved. Nothing was sent.',
-              );
-              if (result) {
-                setManual('');
-                await refresh();
-              }
-            }}
-          >
-            <label>
-              Your own draft
-              <textarea
-                aria-label="Your own draft"
-                required
-                rows={4}
-                maxLength={6000}
-                value={manual}
-                onChange={(e) => setManual(e.target.value)}
-              />
-            </label>
-            <button className="button secondary" disabled={action.busy}>
-              Save local draft
-            </button>
-          </form>
-        </article>
-      )}
-      <h3>AI reports</h3>
-      {reports.map((report) => (
-        <article className="external-review" key={report.id}>
-          <h4>
-            {report.scope} · {dateTime(report.createdAt)}
-          </h4>
-          <p>{report.summary}</p>
-          <p className="microcopy">{report.coverage}</p>
-          {report.assessments.map((assessment) => (
-            <div className="assessment" key={assessment.messageId}>
-              <Status state={assessment.urgency} />
-              <p>{assessment.reason}</p>
-              <blockquote>{assessment.evidence}</blockquote>
-              <details>
-                <summary>Read captured source</summary>
-                <small>Observed {dateTime(assessment.sourceObservedAt)}</small>
-                <pre className="mail-body">{assessment.sourceText}</pre>
-              </details>
-            </div>
+      {activeView === 'reports' && (
+        <>
+          <h3>AI reports</h3>
+          {!visibleReports.length && (
+            <p>
+              No matching report yet. The automatic reader reviews new work messages when AI review
+              is enabled.
+            </p>
+          )}
+          {visibleReports.map((report, index) => (
+            <InboxGroup
+              key={report.id}
+              title={report.scope}
+              description={dateTime(report.createdAt)}
+              count={report.assessments.length}
+              initiallyOpen={index === 0}
+              forceOpen={!!query.trim() || focusedReport?.id === report.id}
+            >
+              <article className="external-review" key={report.id}>
+                <h4>
+                  {report.scope} · {dateTime(report.createdAt)}
+                </h4>
+                <p>{report.summary}</p>
+                <p className="microcopy">{report.coverage}</p>
+                {report.assessments.map((assessment) => (
+                  <div className="assessment" key={assessment.messageId}>
+                    <Status state={assessment.urgency} />
+                    <p>{assessment.reason}</p>
+                    <blockquote>{assessment.evidence}</blockquote>
+                    <details>
+                      <summary>Read captured source</summary>
+                      <small>Observed {dateTime(assessment.sourceObservedAt)}</small>
+                      <pre className="mail-body">{assessment.sourceText}</pre>
+                    </details>
+                  </div>
+                ))}
+              </article>
+            </InboxGroup>
           ))}
-        </article>
-      ))}
-      <h3>Local reply drafts</h3>
-      {data?.drafts
-        .filter((d) => d.status !== 'ARCHIVED')
-        .map((draft) => (
-          <LocalDraft key={draft.id + ':' + draft.version} draft={draft} refresh={refresh} />
-        ))}
+        </>
+      )}
+      {activeView === 'drafts' && (
+        <>
+          <h3>Local reply drafts</h3>
+          {data?.drafts
+            .filter(
+              (d) =>
+                d.status !== 'ARCHIVED' &&
+                matchesSearch(query, d.scope, d.body, d.status) &&
+                (!workOnly || d.id === targetDraft?.id || relevantIds.has(d.sourceMessageId)),
+            )
+            .map((draft, index) => (
+              <InboxGroup
+                key={draft.id}
+                title={draft.scope}
+                description={draft.status === 'REVIEWED' ? 'Ready to copy' : 'Reply to review'}
+                count={1}
+                initiallyOpen={index === 0}
+                forceOpen={!!query.trim() || targetDraft?.id === draft.id}
+              >
+                <LocalDraft key={draft.id + ':' + draft.version} draft={draft} refresh={refresh} />
+              </InboxGroup>
+            ))}
+        </>
+      )}
       <p className="studio-boundary">
         Review and copy a draft, then paste and send it yourself in Outlook or Teams. The AI Office
         has no Outlook or Teams send action.

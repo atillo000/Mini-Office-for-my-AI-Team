@@ -16,6 +16,7 @@ export type Panel =
   | 'start'
   | 'notifications'
   | 'timelogs'
+  | 'focus'
   | null;
 interface OfficeState {
   targetId: string | null;

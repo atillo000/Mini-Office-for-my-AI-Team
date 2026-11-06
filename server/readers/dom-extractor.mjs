@@ -42,15 +42,23 @@ export const capture = ({ provider, mode }) => {
       if (nodes.length) break;
     }
   } else if (mode === 'LIST') {
+    const folder = text(
+      first([
+        '[role="treeitem"][aria-selected="true"]',
+        '[role="navigation"] [aria-current="page"]',
+      ]),
+    )
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => /[\p{L}\p{N}]/u.test(s) && !/^(selected|unread|\d+)$/i.test(s))[0];
     scope =
-      text(
-        first([
-          '[role="treeitem"][aria-selected="true"]',
-          '[role="navigation"] [aria-current="page"]',
-        ]),
+      first(['[role="heading"][aria-label="Results"]']) ||
+      [...document.querySelectorAll('[role="heading"]')].some(
+        (e) => visible(e) && text(e) === 'Results',
       )
-        .replace(/\s+\d+\s*$/, '')
-        .slice(0, 300) || 'Rendered mail list';
+        ? 'Outlook search results'
+        : folder?.replace(/\s+(?:selected\s+\d+(?:\s+unread)?|\d+\s+unread)$/i, '').slice(0, 300) ||
+          'Rendered mail list';
     nodes = [
       ...document.querySelectorAll(
         '[role="listbox"] [role="option"], [data-app-section="MailList"] [role="option"]',
@@ -92,7 +100,10 @@ export const capture = ({ provider, mode }) => {
       if (raw.length > content.length) truncated = true;
       total += content.length;
       return {
-        sourceId: node.getAttribute('data-message-id') || node.id || '',
+        // Outlook regenerates list-row DOM IDs on reload and repeats top results below.
+        // Without a reliable provider message ID, content identifies a captured preview.
+        sourceId:
+          provider === 'outlook' ? '' : node.getAttribute('data-message-id') || node.id || '',
         text: content,
         author: text(
           envelope.querySelector('[data-tid="message-author-name"], [data-tid="message-author"]'),
